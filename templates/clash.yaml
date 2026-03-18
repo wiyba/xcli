@@ -1,0 +1,22 @@
+mode: rule
+log-level: info
+dns:
+  enable: true
+  enhanced-mode: redir-host
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+  ipv6: false
+proxies:
+{proxies}
+proxy-groups:
+  - name: proxy
+    type: select
+    proxies:
+{proxy_names}
+rules:
+  - GEOIP,PRIVATE,DIRECT
+  - MATCH,proxy
