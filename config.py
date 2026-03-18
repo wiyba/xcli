@@ -47,7 +47,7 @@ def _read_secret(env_key, secret_path):
 def reality():
     return {
         "private_key": _read_secret("XCLI_PRIVATE_KEY", "/run/secrets/xcli-private-key"),
-        "public_key": os.environ.get("XCLI_PUBLIC_KEY", ""),
-        "short_id": os.environ.get("XCLI_SHORT_ID", ""),
+        "public_key": os.environ.get("XCLI_PUBLIC_KEY", "u-2Rr_En_Jx0agQKMG7DlwlLPus2hPLBPMXlOM_-lVU"),
+        "short_id": os.environ.get("XCLI_SHORT_ID", "AAAA5555"),
         "sni": os.environ.get("XCLI_SNI", "vk.com"),
     }
