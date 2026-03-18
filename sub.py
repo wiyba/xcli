@@ -87,7 +87,7 @@ def build_clash(uuid, base_headers):
     r = reality()
     hosts = load_hosts()
     proxies = ""
-    proxy_names = ""
+    proxy_groups = ""
     for h in hosts:
         proxies += (
             f"  - name: {h['name']}\n"
@@ -98,8 +98,8 @@ def build_clash(uuid, base_headers):
             f"    flow: xtls-rprx-vision\n"
             f"    network: tcp\n"
             f"    tls: true\n"
-            f"    servername: {r['sni']}\n"
             f"    udp: true\n"
+            f"    servername: {r['sni']}\n"
             f"    client-fingerprint: firefox\n"
             f"    alpn:\n"
             f"      - h2\n"
@@ -107,13 +107,19 @@ def build_clash(uuid, base_headers):
             f"      public-key: {r['public_key']}\n"
             f"      short-id: {r['short_id']}\n"
         )
-        proxy_names += f"      - {h['name']}\n"
+        proxy_groups += (
+            f"  - name: {h['name'].upper()}\n"
+            f"    type: select\n"
+            f"    proxies:\n"
+            f"      - {h['name']}\n"
+        )
     tpl = os.path.join(os.path.dirname(__file__), "templates", "clash.yaml")
     with open(tpl) as f:
         template = f.read()
     return PlainTextResponse(
         template.format(
-            proxies=proxies.rstrip("\n"), proxy_names=proxy_names.rstrip("\n")
+            proxies=proxies.rstrip("\n"),
+            proxy_groups=proxy_groups.rstrip("\n"),
         ),
         media_type="text/yaml",
         headers=base_headers,

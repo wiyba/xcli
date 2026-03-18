@@ -13,10 +13,11 @@ dns:
 proxies:
 {proxies}
 proxy-groups:
-  - name: proxy
-    type: select
-    proxies:
-{proxy_names}
+{proxy_groups}
 rules:
   - GEOIP,PRIVATE,DIRECT
-  - MATCH,proxy
+  - GEOSITE,nixos,DIRECT
+  - GEOSITE,category-ru,DIRECT
+  - DOMAIN-SUFFIX,wiyba.org,DIRECT
+  - GEOSITE,youtube,MOSCOW
+  - MATCH,LONDON
