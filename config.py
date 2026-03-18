@@ -33,9 +33,20 @@ def load_hosts():
     return hosts
 
 
+def _read_secret(env_key, secret_path):
+    val = os.environ.get(env_key, "")
+    if val:
+        return val
+    try:
+        with open(secret_path) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+
+
 def reality():
     return {
-        "private_key": os.environ.get("XCLI_PRIVATE_KEY", ""),
+        "private_key": _read_secret("XCLI_PRIVATE_KEY", "/run/secrets/xcli-private-key"),
         "public_key": os.environ.get("XCLI_PUBLIC_KEY", ""),
         "short_id": os.environ.get("XCLI_SHORT_ID", ""),
         "sni": os.environ.get("XCLI_SNI", "vk.com"),
