@@ -1,5 +1,5 @@
 {
-  description = "xray subscription server";
+  description = "lightweight xray subscription server";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
