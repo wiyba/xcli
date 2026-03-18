@@ -91,14 +91,14 @@ async def subscription(sid: str, request: Request):
 _SUB_BASE = os.environ.get("XCLI_SUB_BASE", "https://sub.wiyba.org")
 
 
-def _xray_config(host):
+def _xray_config():
     r = reality()
     return {
         "log": {"loglevel": "warning"},
         "inbounds": [
             {
                 "listen": "0.0.0.0",
-                "port": host["port"],
+                "port": 443,
                 "protocol": "vless",
                 "settings": {
                     "clients": [
@@ -125,7 +125,7 @@ def _xray_config(host):
 
 def _cli_generate(args):
     if not args:
-        print("Usage: generate users [name] | generate hosts [address]")
+        print("Usage: generate users [name] | generate config")
         sys.exit(1)
 
     kind = args[0]
@@ -145,24 +145,11 @@ def _cli_generate(args):
             print(f"{u['name'].ljust(col)}  {_SUB_BASE}/{u['sid']}")
         return
 
-    if kind == "hosts":
-        hosts = load_hosts()
-        if len(args) > 1:
-            target = args[1]
-            for h in hosts:
-                if h["name"] == target or h["server"] == target:
-                    print(json.dumps(_xray_config(h), indent=2, ensure_ascii=False))
-                    return
-            print(f"host not found: {target}")
-            sys.exit(1)
-        for i, h in enumerate(hosts):
-            if i > 0:
-                print()
-            print(f"{h['server']}:\n")
-            print(json.dumps(_xray_config(h), indent=2, ensure_ascii=False))
+    if kind == "config":
+        print(json.dumps(_xray_config(), indent=2, ensure_ascii=False))
         return
 
-    print("Usage: generate users [name] | generate hosts [address]")
+    print("Usage: generate users [name] | generate config")
     sys.exit(1)
 
 
@@ -181,5 +168,5 @@ if __name__ == "__main__":
     print("Usage:")
     print("  xcli run")
     print("  xcli generate users [name]")
-    print("  xcli generate hosts [address]")
+    print("  xcli generate config")
     sys.exit(1)
