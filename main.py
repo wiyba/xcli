@@ -1,23 +1,32 @@
+import json
 import os
 import re
 import sys
-import json
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import Response, PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from config import load_users, load_hosts, reality
-from sub import make_links, make_base_headers, build_singbox, build_clash, build_plain
+from config import load_hosts, load_users, reality
+from sub import build_clash, build_plain, build_singbox, make_base_headers, make_links
 
 app = FastAPI()
 _dir = os.path.dirname(__file__)
 app.mount("/static", StaticFiles(directory=os.path.join(_dir, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(_dir, "templates"))
 
-_BROWSER_KW = ("Mozilla", "Chrome", "Safari", "Firefox", "Opera", "Edge", "TelegramBot", "WhatsApp")
+_BROWSER_KW = (
+    "Mozilla",
+    "Chrome",
+    "Safari",
+    "Firefox",
+    "Opera",
+    "Edge",
+    "TelegramBot",
+    "WhatsApp",
+)
 _RE_SINGBOX = re.compile(r"sing-box|Hiddify|SFI|SFA|SFM", re.IGNORECASE)
 _RE_CLASH = re.compile(r"Clash|Stash|mihomo", re.IGNORECASE)
 
@@ -68,12 +77,15 @@ async def subscription(sid: str, request: Request):
         return build_plain(user["uuid"], title_b64, base_headers)
 
     links = make_links(user["uuid"])
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "username": user["name"],
-        "sub_url": sub_url,
-        "links": links,
-    })
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "username": user["name"],
+            "sub_url": sub_url,
+            "links": links,
+        },
+    )
 
 
 _SUB_BASE = os.environ.get("XCLI_SUB_BASE", "https://sub.wiyba.org")
@@ -83,28 +95,30 @@ def _xray_config(host):
     r = reality()
     return {
         "log": {"loglevel": "warning"},
-        "inbounds": [{
-            "listen": "0.0.0.0",
-            "port": host["port"],
-            "protocol": "vless",
-            "settings": {
-                "clients": [
-                    {"id": u["uuid"], "flow": "xtls-rprx-vision"}
-                    for u in load_users()
-                ],
-                "decryption": "none",
-            },
-            "streamSettings": {
-                "network": "tcp",
-                "security": "reality",
-                "realitySettings": {
-                    "dest": f"{r['sni']}:443",
-                    "serverNames": [r["sni"]],
-                    "privateKey": r["private_key"],
-                    "shortIds": [r["short_id"]],
+        "inbounds": [
+            {
+                "listen": "0.0.0.0",
+                "port": host["port"],
+                "protocol": "vless",
+                "settings": {
+                    "clients": [
+                        {"id": u["uuid"], "flow": "xtls-rprx-vision"}
+                        for u in load_users()
+                    ],
+                    "decryption": "none",
                 },
-            },
-        }],
+                "streamSettings": {
+                    "network": "tcp",
+                    "security": "reality",
+                    "realitySettings": {
+                        "dest": f"{r['sni']}:443",
+                        "serverNames": [r["sni"]],
+                        "privateKey": r["private_key"],
+                        "shortIds": [r["short_id"]],
+                    },
+                },
+            }
+        ],
         "outbounds": [{"protocol": "freedom"}],
     }
 

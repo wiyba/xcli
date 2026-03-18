@@ -1,6 +1,6 @@
-import os
-import json
 import base64
+import json
+import os
 import urllib.parse
 
 from fastapi.responses import PlainTextResponse
@@ -9,18 +9,20 @@ from config import load_hosts, reality
 
 
 def _vless_uri(uuid, host, r):
-    params = urllib.parse.urlencode({
-        "security": "reality",
-        "alpn": "h2",
-        "encryption": "none",
-        "pbk": r["public_key"],
-        "headerType": "none",
-        "fp": "firefox",
-        "type": "tcp",
-        "flow": "xtls-rprx-vision",
-        "sni": r["sni"],
-        "sid": r["short_id"],
-    })
+    params = urllib.parse.urlencode(
+        {
+            "security": "reality",
+            "alpn": "h2",
+            "encryption": "none",
+            "pbk": r["public_key"],
+            "headerType": "none",
+            "fp": "firefox",
+            "type": "tcp",
+            "flow": "xtls-rprx-vision",
+            "sni": r["sni"],
+            "sid": r["short_id"],
+        }
+    )
     return f"vless://{uuid}@{host['server']}:{host['port']}?{params}#{host['name']}"
 
 
@@ -52,25 +54,27 @@ def build_singbox(uuid, base_headers):
     proxy_names = []
     for h in load_hosts():
         proxy_names.append(h["name"])
-        config["outbounds"].append({
-            "type": "vless",
-            "tag": h["name"],
-            "server": h["server"],
-            "server_port": h["port"],
-            "uuid": uuid,
-            "flow": "xtls-rprx-vision",
-            "tls": {
-                "enabled": True,
-                "server_name": r["sni"],
-                "alpn": ["h2"],
-                "utls": {"enabled": True, "fingerprint": "firefox"},
-                "reality": {
+        config["outbounds"].append(
+            {
+                "type": "vless",
+                "tag": h["name"],
+                "server": h["server"],
+                "server_port": h["port"],
+                "uuid": uuid,
+                "flow": "xtls-rprx-vision",
+                "tls": {
                     "enabled": True,
-                    "public_key": r["public_key"],
-                    "short_id": r["short_id"],
+                    "server_name": r["sni"],
+                    "alpn": ["h2"],
+                    "utls": {"enabled": True, "fingerprint": "firefox"},
+                    "reality": {
+                        "enabled": True,
+                        "public_key": r["public_key"],
+                        "short_id": r["short_id"],
+                    },
                 },
-            },
-        })
+            }
+        )
     config["outbounds"][0]["outbounds"] = proxy_names
     return PlainTextResponse(
         json.dumps(config, indent=2, ensure_ascii=False),
@@ -108,7 +112,9 @@ def build_clash(uuid, base_headers):
     with open(tpl) as f:
         template = f.read()
     return PlainTextResponse(
-        template.format(proxies=proxies.rstrip("\n"), proxy_names=proxy_names.rstrip("\n")),
+        template.format(
+            proxies=proxies.rstrip("\n"), proxy_names=proxy_names.rstrip("\n")
+        ),
         media_type="text/yaml",
         headers=base_headers,
     )
