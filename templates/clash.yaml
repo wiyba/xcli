@@ -11,6 +11,8 @@ proxies:
 proxy-groups:
 {proxy_groups}
 rules:
+  - GEOSITE,flibusta,LONDON
+  - GEOSITE,rutracker,LONDON
   - GEOIP,PRIVATE,DIRECT
   - GEOSITE,nixos,DIRECT
   - GEOSITE,category-ru,DIRECT
