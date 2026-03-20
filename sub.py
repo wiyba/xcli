@@ -35,7 +35,7 @@ def make_links(uuid):
 
 
 def make_base_headers(name, base_url, sid):
-    profile_name = f"xray for {name}"
+    profile_name = f"веба впн for {name}"
     title_b64 = base64.b64encode(profile_name.encode()).decode()
     headers = {
         "profile-update-interval": "12",
