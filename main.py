@@ -1,15 +1,15 @@
-import json
-import os
 import re
 import sys
+from uuid import uuid4
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import os
 
-from config import load_hosts, load_users, reality
+from config import load_users, load_users_raw, save_users_raw
 from sub import build_clash, build_plain, build_singbox, make_base_headers, make_links
 
 app = FastAPI()
@@ -91,65 +91,55 @@ async def subscription(sid: str, request: Request):
 _SUB_BASE = os.environ.get("XCLI_SUB_BASE", "https://sub.wiyba.org")
 
 
-def _xray_config():
-    r = reality()
-    return {
-        "log": {"loglevel": "warning"},
-        "inbounds": [
-            {
-                "listen": "0.0.0.0",
-                "port": 443,
-                "protocol": "vless",
-                "settings": {
-                    "clients": [
-                        {"id": u["uuid"], "flow": "xtls-rprx-vision"}
-                        for u in load_users()
-                    ],
-                    "decryption": "none",
-                },
-                "streamSettings": {
-                    "network": "tcp",
-                    "security": "reality",
-                    "realitySettings": {
-                        "dest": f"{r['sni']}:443",
-                        "serverNames": [r["sni"]],
-                        "privateKey": r["private_key"],
-                        "shortIds": [r["short_id"]],
-                    },
-                },
-            }
-        ],
-        "outbounds": [{"protocol": "freedom"}],
-    }
-
-
-def _cli_generate(args):
+def _cli_user(args):
     if not args:
-        print("Usage: generate users [name] | generate config")
+        print("Usage: xcli user list | add <name> | remove <name>")
         sys.exit(1)
 
-    kind = args[0]
+    action = args[0]
 
-    if kind == "users":
-        users = load_users()
-        if len(args) > 1:
-            target = args[1]
-            for u in users:
-                if u["name"] == target:
-                    print(f"{_SUB_BASE}/{u['sid']}")
-                    return
-            print(f"user not found: {target}")
-            sys.exit(1)
+    if action == "list":
+        users = load_users_raw()
+        if not users:
+            print("no users")
+            return
         col = max(len(u["name"]) for u in users)
         for u in users:
-            print(f"{u['name'].ljust(col)}  {_SUB_BASE}/{u['sid']}")
+            sid = u["id"].split("-")[0]
+            print(f"{u['name'].ljust(col)}  {_SUB_BASE}/{sid}")
         return
 
-    if kind == "config":
-        print(json.dumps(_xray_config(), indent=2, ensure_ascii=False))
+    if action == "add":
+        if len(args) < 2:
+            print("Usage: xcli user add <name>")
+            sys.exit(1)
+        name = args[1]
+        users = load_users_raw()
+        if any(u["name"] == name for u in users):
+            print(f"user already exists: {name}")
+            sys.exit(1)
+        new_uuid = str(uuid4())
+        users.append({"name": name, "id": new_uuid, "flow": "xtls-rprx-vision"})
+        save_users_raw(users)
+        sid = new_uuid.split("-")[0]
+        print(f"added {name}  {_SUB_BASE}/{sid}")
         return
 
-    print("Usage: generate users [name] | generate config")
+    if action == "remove":
+        if len(args) < 2:
+            print("Usage: xcli user remove <name>")
+            sys.exit(1)
+        name = args[1]
+        users = load_users_raw()
+        new_users = [u for u in users if u["name"] != name]
+        if len(new_users) == len(users):
+            print(f"user not found: {name}")
+            sys.exit(1)
+        save_users_raw(new_users)
+        print(f"removed {name}")
+        return
+
+    print("Usage: xcli user list | add <name> | remove <name>")
     sys.exit(1)
 
 
@@ -161,12 +151,11 @@ if __name__ == "__main__":
         uvicorn.run(app, host="127.0.0.1", port=9999, log_level="info")
         sys.exit(0)
 
-    if cmd == "generate":
-        _cli_generate(args)
+    if cmd == "user":
+        _cli_user(args)
         sys.exit(0)
 
     print("Usage:")
     print("  xcli run")
-    print("  xcli generate users [name]")
-    print("  xcli generate config")
+    print("  xcli user list | add <name> | remove <name>")
     sys.exit(1)

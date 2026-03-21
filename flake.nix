@@ -14,6 +14,7 @@
     ]);
   in {
     packages.${system}.default = pkgs.writeShellScriptBin "xcli" ''
+      export PATH="${pkgs.sops}/bin:$PATH"
       exec ${env}/bin/python ${self}/main.py "$@"
     '';
   };
