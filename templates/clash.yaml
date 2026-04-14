@@ -11,11 +11,6 @@ proxies:
 proxy-groups:
 {proxy_groups}
 rules:
-  - GEOSITE,flibusta,LONDON
-  - GEOSITE,rutracker,LONDON
   - GEOIP,PRIVATE,DIRECT
-  - GEOSITE,nixos,DIRECT
-  - GEOSITE,category-ru,DIRECT
   - DOMAIN-SUFFIX,wiyba.org,DIRECT
-  - GEOSITE,youtube,MOSCOW
-  - MATCH,LONDON
+  - MATCH,RELAY

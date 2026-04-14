@@ -2,12 +2,10 @@ import json, os
 
 HOSTS = [
     {"name": "london", "server": "london.wiyba.org", "port": 443},
-    {"name": "stockholm", "server": "stockholm.wiyba.org", "port": 443},
     {"name": "moscow", "server": "moscow.wiyba.org", "port": 443},
     {"name": "relay", "server": "158.160.216.59", "port": 443},
 ]
 
-SUB_BASE = os.environ.get("XCLI_SUB_BASE", "https://sub.wiyba.org")
 USERS_FILE = os.environ.get("XCLI_USERS_FILE", "/run/secrets/xcli-users")
 
 
