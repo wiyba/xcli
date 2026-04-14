@@ -10,7 +10,7 @@ USERS_FILE = os.environ.get("XCLI_USERS_FILE", "/run/secrets/xcli-users")
 
 
 def load_users():
-    return [{"name": u["name"], "uuid": u["id"], "sid": u["id"][:8]} for u in json.load(open(USERS_FILE))]
+    return [{"name": u["email"], "uuid": u["id"], "sid": u["id"][:8]} for u in json.load(open(USERS_FILE))]
 
 
 def reality():
