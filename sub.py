@@ -12,7 +12,7 @@ def _vless_uri(uuid, host, r):
         "type": "tcp", "flow": "xtls-rprx-vision",
         "sni": r["sni"], "sid": r["short_id"],
     })
-    return f"vless://{uuid}@{host['server']}:{host['port']}?{params}#{host['name']}"
+    return f"vless://{uuid}@{host['server']}:{host['port']}?{params}#{urllib.parse.quote(host['label'])}"
 
 
 def make_links(uuid):
