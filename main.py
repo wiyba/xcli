@@ -1,4 +1,4 @@
-import asyncio, os, re
+import os, re
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -6,7 +6,7 @@ from fastapi.responses import PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from config import load_users, SUB_BASE
+from config import load_users
 from sub import build_clash, build_plain, build_singbox, make_base_headers, make_links
 
 _dir = os.path.dirname(__file__)
@@ -14,8 +14,6 @@ _dir = os.path.dirname(__file__)
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=os.path.join(_dir, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(_dir, "templates"))
-
-admin = FastAPI()
 
 _BROWSER = ("Mozilla", "Chrome", "Safari", "Firefox", "Opera", "Edge", "TelegramBot", "WhatsApp")
 _SINGBOX = re.compile(r"sing-box|Hiddify|SFI|SFA|SFM", re.I)
@@ -66,15 +64,5 @@ async def subscription(sid: str, request: Request):
     })
 
 
-@admin.get("/")
-def users():
-    return PlainTextResponse("\n".join(f"{u['name']} {SUB_BASE}/{u['sid']}" for u in load_users()) + "\n")
-
-
 if __name__ == "__main__":
-    async def serve():
-        await asyncio.gather(
-            uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=9999, log_level="info")).serve(),
-            uvicorn.Server(uvicorn.Config(admin, host="127.0.0.1", port=12345, log_level="warning")).serve(),
-        )
-    asyncio.run(serve())
+    uvicorn.run(app, host="127.0.0.1", port=9999, log_level="info")

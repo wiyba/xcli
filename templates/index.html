@@ -167,7 +167,7 @@
             <div
                 class="row"
                 onclick="copy('{{ l.uri }}')"
-                data-host="{{ l.host }}"
+                data-name="{{ l.label }}"
             >
                 <span class="name">{{ l.label }}</span>
                 <div class="right">
@@ -1183,12 +1183,12 @@
                 .then((r) => r.json())
                 .then((data) => {
                     const map = Object.fromEntries(
-                        (data.results || []).map((r) => [r.name, r]),
+                        (data.results || []).map((r) => [r.name.split(".")[0], r]),
                     );
                     document
-                        .querySelectorAll(".row[data-host]")
+                        .querySelectorAll(".row[data-name]")
                         .forEach((row) => {
-                            const info = map[row.dataset.host];
+                            const info = map[row.dataset.name];
                             const ping = row.querySelector(".ping");
                             const dot = row.querySelector(".dot");
                             if (info && info.up) {
@@ -1202,7 +1202,7 @@
                 })
                 .catch(() => {
                     document
-                        .querySelectorAll(".row[data-host]")
+                        .querySelectorAll(".row[data-name]")
                         .forEach((r) => {
                             r.querySelector(".ping").textContent = "-";
                             r.querySelector(".dot").classList.add("down");
