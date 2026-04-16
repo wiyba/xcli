@@ -1,37 +1,49 @@
 import json
 import os
 
+SECRETS_DIR = os.environ.get("XCLI_SECRETS_DIR", "/run/secrets")
+USERS_FILE = os.environ.get(
+    "XCLI_USERS_FILE", os.path.join(SECRETS_DIR, "xcli-users.json")
+)
+
+FINGERPRINT = "chrome"
+
+
+def _read(name):
+    with open(os.path.join(SECRETS_DIR, name)) as f:
+        return f.read().strip()
+
+
 HOSTS = [
+    {
+        "name": "relay",
+        "label": "relay",
+        "server": "158.160.216.59",
+        "port_tcp": 443,
+        "port_xhttp": 8443,
+        "sni": "storage.yandexcloud.net",
+        "public_key": _read("xray-relay-key-pub"),
+        "short_id": _read("xray-relay-sid"),
+        "xhttp_path": _read("xray-relay-xhttp-path"),
+    },
     {
         "name": "london",
         "label": "\U0001f1ec\U0001f1e7 london",
-        "server": "london.wiyba.org",
-        "port": 443,
+        "server": "45.154.197.120",
+        "port_tcp": 443,
+        "port_xhttp": 8443,
+        "sni": "fonts.gstatic.com",
+        "public_key": _read("xray-london-key-pub"),
+        "short_id": _read("xray-london-sid"),
+        "xhttp_path": _read("xray-london-xhttp-path"),
     },
-    {
-        "name": "moscow",
-        "label": "\U0001f1f7\U0001f1fa moscow",
-        "server": "moscow.wiyba.org",
-        "port": 443,
-    },
-    {"name": "relay", "label": "relay", "server": "158.160.216.59", "port": 443},
 ]
-
-USERS_FILE = os.environ.get("XCLI_USERS_FILE", "/run/secrets/vless-users")
 
 
 def load_users():
-    return [
-        {"name": u["email"], "uuid": u["id"], "sid": u["id"][:8]}
-        for u in json.load(open(USERS_FILE))
-    ]
-
-
-def reality():
-    return {
-        "public_key": os.environ.get(
-            "XCLI_PUBLIC_KEY", "u-2Rr_En_Jx0agQKMG7DlwlLPus2hPLBPMXlOM_-lVU"
-        ),
-        "short_id": os.environ.get("XCLI_SHORT_ID", "4ba9b78acaa91b44"),
-        "sni": os.environ.get("XCLI_SNI", "yandex.ru"),
-    }
+    with open(USERS_FILE) as f:
+        return [
+            {"name": name, "uuid": uuid, "sid": uuid[:8]}
+            # {"name": name, "uuid": uuid, "sid": uuid[:8] + uuid[9:13]}
+            for name, uuid in json.load(f).items()
+        ]
