@@ -60,20 +60,20 @@ def _mihomo_proxy(uuid, h, transport):
         f"    type: vless",
         f"    server: {h['server']}",
         f"    port: {port}",
-        f"    uuid: \"{uuid}\"",
+        f'    uuid: "{uuid}"',
         f"    network: {transport}",
         f"    tls: true",
         f"    udp: true",
         f"    servername: {h['sni']}",
         f"    client-fingerprint: {FINGERPRINT}",
         f"    reality-opts:",
-        f"      public-key: \"{h['public_key']}\"",
-        f"      short-id: \"{h['short_id']}\"",
+        f'      public-key: "{h["public_key"]}"',
+        f'      short-id: "{h["short_id"]}"',
     ]
     if transport == "xhttp":
         lines += [
             f"    xhttp-opts:",
-            f"      path: \"{h['xhttp_path']}\"",
+            f'      path: "{h["xhttp_path"]}"',
         ]
     else:
         lines += [
@@ -82,41 +82,6 @@ def _mihomo_proxy(uuid, h, transport):
             f"      - h2",
         ]
     return name, "\n".join(lines)
-
-
-_RULES = """\
-  - GEOSITE,tiktok,LONDON
-  - GEOSITE,youtube,LONDON
-  - GEOSITE,flibusta,LONDON
-  - GEOSITE,rutracker,LONDON
-  - GEOSITE,category-ai-!cn,LONDON
-  - GEOSITE,figma,LONDON
-  - GEOSITE,canva,LONDON
-  - GEOSITE,adobe,LONDON
-  - GEOSITE,notion,LONDON
-  - GEOSITE,atlassian,LONDON
-  - GEOSITE,slack,LONDON
-  - GEOSITE,spotify,LONDON
-  - GEOSITE,netflix,LONDON
-  - GEOSITE,deezer,LONDON
-  - GEOSITE,jetbrains,LONDON
-  - GEOSITE,jetbrains-ai,LONDON
-  - GEOSITE,vercel,LONDON
-  - GEOSITE,heroku,LONDON
-  - GEOSITE,digitalocean,LONDON
-  - GEOSITE,dropbox,LONDON
-  - GEOSITE,paypal,LONDON
-  - GEOSITE,stripe,LONDON
-  - GEOSITE,wise,LONDON
-  - GEOSITE,zendesk,LONDON
-  - GEOSITE,autodesk,LONDON
-  - GEOSITE,salesforce,LONDON
-  - GEOSITE,godaddy,LONDON
-  - GEOSITE,wix,LONDON
-  - GEOSITE,patreon,LONDON
-  - GEOIP,PRIVATE,DIRECT
-  - IP-CIDR6,::/0,LONDON
-  - MATCH,RELAY"""
 
 
 def build_mihomo(uuid, base_headers):
@@ -140,18 +105,13 @@ def build_mihomo(uuid, base_headers):
 mixed-port: 7890
 mode: rule
 log-level: warning
-dns:
-  enable: true
-  nameserver:
-    - 1.1.1.1
-    - 8.8.8.8
-  ipv6: false
 proxies:
 {proxies_yaml.rstrip()}
 proxy-groups:
 {groups_yaml.rstrip()}
 rules:
-{_RULES}
+  - GEOIP,PRIVATE,DIRECT
+  - MATCH,RELAY
 """
     return PlainTextResponse(
         config,
