@@ -1,19 +1,21 @@
 import base64
-import json
-import os
 import urllib.parse
 
 from fastapi.responses import PlainTextResponse
 
 from config import FINGERPRINT, HOSTS
 
-_DIR = os.path.dirname(__file__)
 TRANSPORTS = ("tcp", "xhttp")
+_EMOJI = {"tcp": "\u26a1", "xhttp": "\U0001f512"}
+
+
+def _label(h, transport):
+    return f"{h['label'].upper()} {_EMOJI[transport]}"
 
 
 def _endpoint(uuid, h, transport):
     port = h["port_xhttp"] if transport == "xhttp" else h["port_tcp"]
-    label = f"{h['label']} {transport}"
+    label = _label(h, transport)
     params = {
         "security": "reality",
         "encryption": "none",
@@ -50,65 +52,28 @@ def make_base_headers(name, base_url, sid):
     }
 
 
-def _singbox_outbound(uuid, h, transport):
-    out = {
-        "type": "vless",
-        "tag": f"{h['name']}-{transport}",
-        "server": h["server"],
-        "server_port": h["port_xhttp"] if transport == "xhttp" else h["port_tcp"],
-        "uuid": uuid,
-        "tls": {
-            "enabled": True,
-            "server_name": h["sni"],
-            "utls": {"enabled": True, "fingerprint": FINGERPRINT},
-            "reality": {"enabled": True, "public_key": h["public_key"], "short_id": h["short_id"]},
-        },
-    }
-    if transport == "xhttp":
-        out["transport"] = {"type": "xhttp", "path": h["xhttp_path"]}
-    else:
-        out["flow"] = "xtls-rprx-vision"
-        out["tls"]["alpn"] = ["h2"]
-    return out
-
-
-def build_singbox(uuid, base_headers):
-    with open(os.path.join(_DIR, "templates", "singbox.json")) as f:
-        config = json.load(f)
-    tags = []
-    for h in HOSTS:
-        for t in TRANSPORTS:
-            config["outbounds"].append(_singbox_outbound(uuid, h, t))
-            tags.append(f"{h['name']}-{t}")
-    config["outbounds"][0]["outbounds"] = tags
-    return PlainTextResponse(
-        json.dumps(config, indent=2, ensure_ascii=False),
-        media_type="application/json",
-        headers=base_headers,
-    )
-
-
-def _clash_proxy(uuid, h, transport):
+def _mihomo_proxy(uuid, h, transport):
     port = h["port_xhttp"] if transport == "xhttp" else h["port_tcp"]
+    name = f"{h['name']}-{transport}"
     lines = [
-        f"  - name: {h['name']}-{transport}",
+        f"  - name: {name}",
         f"    type: vless",
         f"    server: {h['server']}",
         f"    port: {port}",
-        f"    uuid: {uuid}",
+        f"    uuid: \"{uuid}\"",
         f"    network: {transport}",
         f"    tls: true",
         f"    udp: true",
         f"    servername: {h['sni']}",
         f"    client-fingerprint: {FINGERPRINT}",
         f"    reality-opts:",
-        f"      public-key: {h['public_key']}",
-        f"      short-id: {h['short_id']}",
+        f"      public-key: \"{h['public_key']}\"",
+        f"      short-id: \"{h['short_id']}\"",
     ]
     if transport == "xhttp":
         lines += [
             f"    xhttp-opts:",
-            f"      path: {h['xhttp_path']}",
+            f"      path: \"{h['xhttp_path']}\"",
         ]
     else:
         lines += [
@@ -116,22 +81,80 @@ def _clash_proxy(uuid, h, transport):
             f"    alpn:",
             f"      - h2",
         ]
-    return "\n".join(lines) + "\n"
+    return name, "\n".join(lines)
 
 
-def build_clash(uuid, base_headers):
-    proxies = "".join(_clash_proxy(uuid, h, t) for h in HOSTS for t in TRANSPORTS)
-    groups = "".join(
-        f"  - name: {h['name'].upper()}\n"
-        f"    type: url-test\n"
-        f"    proxies:\n"
-        + "".join(f"      - {h['name']}-{t}\n" for t in TRANSPORTS)
-        for h in HOSTS
-    )
-    with open(os.path.join(_DIR, "templates", "clash.yaml")) as f:
-        template = f.read()
+_RULES = """\
+  - GEOSITE,tiktok,LONDON
+  - GEOSITE,youtube,LONDON
+  - GEOSITE,flibusta,LONDON
+  - GEOSITE,rutracker,LONDON
+  - GEOSITE,category-ai-!cn,LONDON
+  - GEOSITE,figma,LONDON
+  - GEOSITE,canva,LONDON
+  - GEOSITE,adobe,LONDON
+  - GEOSITE,notion,LONDON
+  - GEOSITE,atlassian,LONDON
+  - GEOSITE,slack,LONDON
+  - GEOSITE,spotify,LONDON
+  - GEOSITE,netflix,LONDON
+  - GEOSITE,deezer,LONDON
+  - GEOSITE,jetbrains,LONDON
+  - GEOSITE,jetbrains-ai,LONDON
+  - GEOSITE,vercel,LONDON
+  - GEOSITE,heroku,LONDON
+  - GEOSITE,digitalocean,LONDON
+  - GEOSITE,dropbox,LONDON
+  - GEOSITE,paypal,LONDON
+  - GEOSITE,stripe,LONDON
+  - GEOSITE,wise,LONDON
+  - GEOSITE,zendesk,LONDON
+  - GEOSITE,autodesk,LONDON
+  - GEOSITE,salesforce,LONDON
+  - GEOSITE,godaddy,LONDON
+  - GEOSITE,wix,LONDON
+  - GEOSITE,patreon,LONDON
+  - GEOIP,PRIVATE,DIRECT
+  - IP-CIDR6,::/0,LONDON
+  - MATCH,RELAY"""
+
+
+def build_mihomo(uuid, base_headers):
+    proxies_yaml = ""
+    groups = {}
+    for h in HOSTS:
+        group_name = h["name"].upper()
+        groups.setdefault(group_name, [])
+        for t in TRANSPORTS:
+            name, yaml = _mihomo_proxy(uuid, h, t)
+            proxies_yaml += yaml + "\n"
+            groups[group_name].append(name)
+
+    groups_yaml = ""
+    for gname, members in groups.items():
+        groups_yaml += f"  - name: {gname}\n    type: select\n    proxies:\n"
+        for m in members:
+            groups_yaml += f"      - {m}\n"
+
+    config = f"""\
+mixed-port: 7890
+mode: rule
+log-level: warning
+dns:
+  enable: true
+  nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  ipv6: false
+proxies:
+{proxies_yaml.rstrip()}
+proxy-groups:
+{groups_yaml.rstrip()}
+rules:
+{_RULES}
+"""
     return PlainTextResponse(
-        template.format(proxies=proxies.rstrip("\n"), proxy_groups=groups.rstrip("\n")),
+        config,
         media_type="text/yaml",
         headers=base_headers,
     )
