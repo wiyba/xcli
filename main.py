@@ -24,6 +24,7 @@ _BROWSER = (
 )
 _MIHOMO = ("clash", "mihomo", "stash", "meta", "flclash")
 
+ANNOUNCE = "лимит трафика применяется только к \U0001f1f7\U0001f1fa"
 SUPPORT_URL = "https://t.me/wiybaa"
 UPDATE_INTERVAL_HOURS = 12
 
@@ -163,6 +164,7 @@ def _headers(name, base_url, sid):
         "profile-title": f"base64:{_b64(profile)}",
         "profile-update-interval": str(UPDATE_INTERVAL_HOURS),
         "subscription-userinfo": "upload=0; download=0; total=0; expire=2276640000",
+        "announce": f"base64:{_b64(ANNOUNCE)}",
         "support-url": SUPPORT_URL,
         "profile-web-page-url": f"{base_url}/{sid}",
         "content-disposition": f"attachment; filename*=UTF-8''{urllib.parse.quote(profile)}",
