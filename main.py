@@ -59,14 +59,14 @@ def _links(uuid):
         xhttp_label = f"{h['flag']} alt"
         out.append(
             {
-                "uri": f"vless://{uuid}@{h['server']}:{h['port_tcp']}?{urllib.parse.urlencode(tcp)}#{urllib.parse.quote(tcp_label)}",
+                "uri": f"vless://{uuid}@{h['server']}:{h['port_tcp']}?{urllib.parse.urlencode(tcp)}#{tcp_label}",
                 "label": tcp_label,
                 "host": h["name"],
             }
         )
         out.append(
             {
-                "uri": f"vless://{uuid}@{h['server']}:{h['port_xhttp']}?{urllib.parse.urlencode(xhttp)}#{urllib.parse.quote(xhttp_label)}",
+                "uri": f"vless://{uuid}@{h['server']}:{h['port_xhttp']}?{urllib.parse.urlencode(xhttp)}#{xhttp_label}",
                 "label": xhttp_label,
                 "host": h["name"],
             }
