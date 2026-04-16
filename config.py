@@ -17,7 +17,7 @@ def _read(name):
 HOSTS = [
     {
         "name": "relay",
-        "label": "relay",
+        "label": "\U0001f1f7\U0001f1fa",
         "server": "REDACTED",
         "port_tcp": 443,
         "port_xhttp": 8443,
@@ -28,7 +28,7 @@ HOSTS = [
     },
     {
         "name": "london",
-        "label": "\U0001f1ec\U0001f1e7 london",
+        "label": "\U0001f1ec\U0001f1e7",
         "server": "REDACTED",
         "port_tcp": 443,
         "port_xhttp": 8443,
