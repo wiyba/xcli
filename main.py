@@ -55,8 +55,8 @@ def _links(uuid):
             "headerType": "none",
         }
         xhttp = {**common, "type": "xhttp", "path": h["xhttp_path"]}
-        tcp_label = h["flag"]
-        xhttp_label = f"{h['flag']} alt"
+        tcp_label = f"{h['flag']} tcp"
+        xhttp_label = f"{h['flag']} xhttp"
         out.append(
             {
                 "uri": f"vless://{uuid}@{h['server']}:{h['port_tcp']}?{urllib.parse.urlencode(tcp)}#{tcp_label}",
