@@ -7,16 +7,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from config import load_users
-from sub import build_clash, build_plain, build_singbox, make_base_headers, make_links
+from sub import build_mihomo, build_plain, make_base_headers, make_links
 
 _dir = os.path.dirname(__file__)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=os.path.join(_dir, "static")), name="static")
-templates = Jinja2Templates(directory=os.path.join(_dir, "templates"))
+templates = Jinja2Templates(directory=_dir)
 
 _BROWSER = ("Mozilla", "Chrome", "Safari", "Firefox", "Opera", "Edge", "TelegramBot", "WhatsApp")
-_SINGBOX = re.compile(r"sing-box|Hiddify|SFI|SFA|SFM", re.I)
 _CLASH = re.compile(r"Clash|Stash|mihomo", re.I)
 
 
@@ -50,10 +49,8 @@ async def subscription(sid: str, request: Request):
 
     if "text/html" not in accept and not any(k in ua for k in _BROWSER):
         title_b64, headers = make_base_headers(user["name"], base_url, sid)
-        if _SINGBOX.search(ua):
-            return build_singbox(user["uuid"], headers)
         if _CLASH.search(ua):
-            return build_clash(user["uuid"], headers)
+            return build_mihomo(user["uuid"], headers)
         return build_plain(user["uuid"], title_b64, headers)
 
     return templates.TemplateResponse("index.html", {
