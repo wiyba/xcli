@@ -1183,7 +1183,10 @@
                 .then((r) => r.json())
                 .then((data) => {
                     const map = Object.fromEntries(
-                        (data.results || []).map((r) => [r.name.split(".")[0], r]),
+                        (data.results || []).map((r) => [
+                            r.name.split(".")[0],
+                            r,
+                        ]),
                     );
                     document
                         .querySelectorAll(".row[data-name]")
