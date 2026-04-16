@@ -17,7 +17,7 @@ def _read(name):
 HOSTS = [
     {
         "name": "relay",
-        "label": "\U0001f1f7\U0001f1fa",
+        "flag": "\U0001f1f7\U0001f1fa",
         "server": "REDACTED",
         "port_tcp": 443,
         "port_xhttp": 8443,
@@ -28,7 +28,7 @@ HOSTS = [
     },
     {
         "name": "london",
-        "label": "\U0001f1ec\U0001f1e7",
+        "flag": "\U0001f1ec\U0001f1e7",
         "server": "REDACTED",
         "port_tcp": 443,
         "port_xhttp": 8443,
@@ -44,6 +44,5 @@ def load_users():
     with open(USERS_FILE) as f:
         return [
             {"name": name, "uuid": uuid, "sid": uuid[:8]}
-            # {"name": name, "uuid": uuid, "sid": uuid[:8] + uuid[9:13]}
             for name, uuid in json.load(f).items()
         ]
