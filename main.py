@@ -24,7 +24,7 @@ _BROWSER = (
 )
 _MIHOMO = ("clash", "mihomo", "stash", "meta", "flclash")
 
-ANNOUNCE = "лимит трафика применяется только к \U0001f1f7\U0001f1fa"
+ANNOUNCE = ""
 SUPPORT_URL = "https://t.me/wiybaa"
 UPDATE_INTERVAL_HOURS = 12
 
