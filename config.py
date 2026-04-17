@@ -21,7 +21,7 @@ HOSTS = [
         "server": "REDACTED",
         "port_tcp": 443,
         "port_xhttp": 8443,
-        "sni": "yastatic.net",
+        "sni": "yandex.ru",
         "public_key": _read("xray-relay-key-pub"),
         "short_id": _read("xray-relay-sid"),
         "xhttp_path": _read("xray-relay-xhttp-path"),
