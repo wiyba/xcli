@@ -37,9 +37,9 @@ def _b64(text):
     return base64.b64encode(text.encode()).decode()
 
 
-def _links(uuid):
+def _links(uuid, hosts):
     out = []
-    for h in HOSTS:
+    for h in hosts:
         common = {
             "security": "reality",
             "encryption": "none",
@@ -80,9 +80,9 @@ class _NoAliasDumper(yaml.SafeDumper):
         return True
 
 
-def _mihomo(uuid):
+def _mihomo(uuid, hosts):
     proxies = []
-    for h in HOSTS:
+    for h in hosts:
         reality = {"public-key": h["public_key"], "short-id": h["short_id"]}
         proxies.append(
             {
@@ -124,8 +124,9 @@ def _mihomo(uuid):
             "type": "select",
             "proxies": [h["name"], f"{h['name']}-alt"],
         }
-        for h in HOSTS
+        for h in hosts
     ]
+    default_group = hosts[0]["name"].upper()
 
     config = {
         "mixed-port": 7890,
@@ -152,7 +153,7 @@ def _mihomo(uuid):
         "rules": [
             "GEOSITE,private,DIRECT",
             "DOMAIN-SUFFIX,wiyba.org,DIRECT",
-            "MATCH,RELAY",
+            f"MATCH,{default_group}",
         ],
     }
     return yaml.dump(config, Dumper=_NoAliasDumper, sort_keys=False, allow_unicode=True)
@@ -195,6 +196,7 @@ async def subscription(sid: str, request: Request):
     if not user:
         return Response(status_code=418)
 
+    hosts = [h for h in HOSTS if h["name"] in user["hosts"]]
     base_url = f"{request.url.scheme}://{request.url.netloc}"
     ua = request.headers.get("user-agent", "")
     ua_low = ua.lower()
@@ -203,7 +205,7 @@ async def subscription(sid: str, request: Request):
 
     if any(k in ua_low for k in _MIHOMO):
         return PlainTextResponse(
-            _mihomo(user["uuid"]),
+            _mihomo(user["uuid"], hosts),
             headers=headers,
             media_type="application/x-yaml",
         )
@@ -215,11 +217,11 @@ async def subscription(sid: str, request: Request):
                 "request": request,
                 "username": user["name"],
                 "sub_url": f"{base_url}/{sid}",
-                "links": _links(user["uuid"]),
+                "links": _links(user["uuid"], hosts),
             },
         )
 
-    body = "\n".join(e["uri"] for e in _links(user["uuid"]))
+    body = "\n".join(e["uri"] for e in _links(user["uuid"], hosts))
     return PlainTextResponse(_b64(body), headers=headers)
 
 
