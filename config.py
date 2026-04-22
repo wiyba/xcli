@@ -10,8 +10,7 @@ FINGERPRINT = "chrome"
 
 
 def _read(name):
-    with open(os.path.join(SECRETS_DIR, name)) as f:
-        return f.read().strip()
+    return open(os.path.join(SECRETS_DIR, name)).read().strip()
 
 
 HOSTS = [
@@ -37,12 +36,22 @@ HOSTS = [
         "short_id": _read("xray-london-sid"),
         "xhttp_path": _read("xray-london-xhttp-path"),
     },
+    {
+        "name": "stockholm",
+        "flag": "\U0001f1f8\U0001f1ea",
+        "server": "207.2.120.106",
+        "port_tcp": 443,
+        "port_xhttp": 8443,
+        "sni": "fonts.googleapis.com",
+        "public_key": _read("xray-stockholm-key-pub"),
+        "short_id": _read("xray-stockholm-sid"),
+        "xhttp_path": _read("xray-stockholm-xhttp-path"),
+    },
 ]
 
 
 def load_users():
-    with open(USERS_FILE) as f:
-        return [
-            {"name": name, "uuid": uuid, "sid": uuid[:8]}
-            for name, uuid in json.load(f).items()
-        ]
+    return [
+        {"name": name, "uuid": u["uuid"], "sid": u["uuid"][:8], "hosts": u["hosts"]}
+        for name, u in json.load(open(USERS_FILE)).items()
+    ]
