@@ -1,229 +1,162 @@
-import base64
+import argparse
+import json
 import os
-import urllib.parse
+import sys
+import urllib.request
 
-import uvicorn
-import yaml
-from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse, Response
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-
-from config import FINGERPRINT, HOSTS, load_users
-
-_dir = os.path.dirname(__file__)
-_BROWSER = (
-    "Mozilla",
-    "Chrome",
-    "Safari",
-    "Firefox",
-    "Opera",
-    "Edge",
-    "TelegramBot",
-    "WhatsApp",
+from config import HOSTS, load_users
+from db import (
+    all_rows,
+    connect,
+    ensure,
+    set_host_bytes,
+    set_relay_enabled,
+    topup,
 )
-_MIHOMO = ("clash", "mihomo", "stash", "meta", "flclash")
 
-ANNOUNCE = ""
-SUPPORT_URL = "https://t.me/wiybaa"
-UPDATE_INTERVAL_HOURS = 12
-
-app = FastAPI()
-app.mount("/static", StaticFiles(directory=os.path.join(_dir, "static")), name="static")
-templates = Jinja2Templates(directory=_dir)
+GB = 1024**3
+TOKEN_PATH = os.environ.get("XCLI_AGENT_TOKEN_PATH", "/run/secrets/xray-agent")
 
 
-def _b64(text):
-    return base64.b64encode(text.encode()).decode()
+def _sync(conn):
+    ensure(conn, [u["name"] for u in load_users()])
 
 
-def _links(uuid, hosts):
+def cmd_serve(_args):
+    import uvicorn
+
+    from serve import app
+
+    uvicorn.run(app, host="127.0.0.1", port=9999, log_level="info")
+
+
+def _agent(ip, method, path, body=None):
+    token = open(TOKEN_PATH).read().strip()
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(
+        f"http://{ip}{path}",
+        data=data,
+        method=method,
+        headers={
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return r.read()
+
+
+def cmd_collect(_args):
+    conn = connect()
+    users = {u["name"]: u for u in load_users()}
+    ensure(conn, users.keys())
+
+    for h in HOSTS:
+        try:
+            remote = json.loads(_agent(h["server"], "GET", "/usage"))
+            for user, bytes_ in remote.get("users", {}).items():
+                if user in users:
+                    set_host_bytes(conn, user, h["name"], int(bytes_))
+        except Exception as e:
+            print(f"collect {h['name']}: {e}", file=sys.stderr)
+
+    relay_ip = next(h["server"] for h in HOSTS if h["name"] == "relay")
+    for r in all_rows(conn):
+        name = r["user"]
+        u = users.get(name)
+        if not u:
+            continue
+        desired = 1 if u["admin"] or r["limit"] > r["relay"] else 0
+        if desired == r["relay_enabled"]:
+            continue
+        try:
+            if desired:
+                _agent(
+                    relay_ip,
+                    "POST",
+                    "/user",
+                    {"op": "add", "email": name, "uuid": u["uuid"]},
+                )
+            else:
+                _agent(
+                    relay_ip,
+                    "POST",
+                    "/user",
+                    {"op": "remove", "email": name},
+                )
+            set_relay_enabled(conn, name, desired)
+        except Exception as e:
+            print(f"reconcile {name}: {e}", file=sys.stderr)
+    conn.close()
+
+
+def cmd_topup(args):
+    conn = connect()
+    _sync(conn)
+    topup(conn, args.user, int(args.gb * GB))
+    conn.close()
+    cmd_balance(argparse.Namespace(user=args.user))
+
+
+def cmd_balance(args):
+    conn = connect()
+    _sync(conn)
+    admins = {u["name"]: u["admin"] for u in load_users()}
+    rows = all_rows(conn)
+    conn.close()
+    if args.user:
+        rows = [r for r in rows if r["user"] == args.user]
+        if not rows:
+            print(f"no such user: {args.user}", file=sys.stderr)
+            sys.exit(1)
+
+    def fmt(n):
+        return f"{n / GB:.2f}"
+
+    cols = ("user", "admin", "limit", "used(relay)", "london", "stockholm")
+    widths = [len(c) for c in cols]
     out = []
-    for h in hosts:
-        common = {
-            "security": "reality",
-            "encryption": "none",
-            "pbk": h["public_key"],
-            "sni": h["sni"],
-            "sid": h["short_id"],
-            "fp": FINGERPRINT,
-        }
-        tcp = {
-            **common,
-            "type": "tcp",
-            "flow": "xtls-rprx-vision",
-            "alpn": "h2",
-            "headerType": "none",
-        }
-        xhttp = {**common, "type": "xhttp", "path": h["xhttp_path"]}
-        tcp_label = f"{h['flag']} tcp"
-        xhttp_label = f"{h['flag']} xhttp"
-        out.append(
-            {
-                "uri": f"vless://{uuid}@{h['server']}:{h['port_tcp']}?{urllib.parse.urlencode(tcp)}#{tcp_label}",
-                "label": tcp_label,
-                "host": h["name"],
-            }
+    for r in rows:
+        row = (
+            r["user"],
+            "y" if admins.get(r["user"]) else "",
+            fmt(r["limit"]),
+            fmt(r["relay"]),
+            fmt(r["london"]),
+            fmt(r["stockholm"]),
         )
-        out.append(
-            {
-                "uri": f"vless://{uuid}@{h['server']}:{h['port_xhttp']}?{urllib.parse.urlencode(xhttp)}#{xhttp_label}",
-                "label": xhttp_label,
-                "host": h["name"],
-            }
-        )
-    return out
+        out.append(row)
+        widths = [max(w, len(v)) for w, v in zip(widths, row)]
+
+    fmt_row = lambda r: "  ".join(v.ljust(w) for v, w in zip(r, widths))
+    print(fmt_row(cols))
+    print(fmt_row(["-" * w for w in widths]))
+    for r in out:
+        print(fmt_row(r))
 
 
-class _NoAliasDumper(yaml.SafeDumper):
-    def ignore_aliases(self, data):
-        return True
+def main():
+    p = argparse.ArgumentParser(prog="xcli")
+    sub = p.add_subparsers(dest="cmd", required=True)
 
+    s = sub.add_parser("serve", help="run subscription server")
+    s.set_defaults(f=cmd_serve)
 
-def _mihomo(uuid, hosts):
-    proxies = []
-    for h in hosts:
-        reality = {"public-key": h["public_key"], "short-id": h["short_id"]}
-        proxies.append(
-            {
-                "name": h["name"],
-                "type": "vless",
-                "server": h["server"],
-                "port": h["port_tcp"],
-                "uuid": uuid,
-                "flow": "xtls-rprx-vision",
-                "network": "tcp",
-                "tls": True,
-                "udp": True,
-                "servername": h["sni"],
-                "client-fingerprint": FINGERPRINT,
-                "alpn": ["h2"],
-                "reality-opts": reality,
-            }
-        )
-        proxies.append(
-            {
-                "name": f"{h['name']}-alt",
-                "type": "vless",
-                "server": h["server"],
-                "port": h["port_xhttp"],
-                "uuid": uuid,
-                "network": "xhttp",
-                "tls": True,
-                "udp": True,
-                "servername": h["sni"],
-                "client-fingerprint": FINGERPRINT,
-                "xhttp-opts": {"path": h["xhttp_path"]},
-                "reality-opts": reality,
-            }
-        )
+    s = sub.add_parser("topup", help="add GB to user quota")
+    s.add_argument("user")
+    s.add_argument("gb", type=float)
+    s.set_defaults(f=cmd_topup)
 
-    groups = [
-        {
-            "name": h["name"].upper(),
-            "type": "select",
-            "proxies": [h["name"], f"{h['name']}-alt"],
-        }
-        for h in hosts
-    ]
-    default_group = hosts[0]["name"].upper()
+    s = sub.add_parser("balance", help="show balances (GB)")
+    s.add_argument("user", nargs="?")
+    s.set_defaults(f=cmd_balance)
 
-    config = {
-        "mixed-port": 7890,
-        "mode": "rule",
-        "log-level": "warning",
-        "dns": {
-            "enable": True,
-            "enhanced-mode": "fake-ip",
-            "default-nameserver": ["1.1.1.1", "8.8.8.8"],
-            "nameserver": [
-                "https://1.1.1.1/dns-query",
-                "https://8.8.8.8/dns-query",
-            ],
-        },
-        "tun": {
-            "enable": True,
-            "stack": "gvisor",
-            "auto-route": True,
-            "auto-detect-interface": True,
-            "strict-route": True,
-        },
-        "proxies": proxies,
-        "proxy-groups": groups,
-        "rules": [
-            "GEOSITE,private,DIRECT",
-            "DOMAIN-SUFFIX,wiyba.org,DIRECT",
-            f"MATCH,{default_group}",
-        ],
-    }
-    return yaml.dump(config, Dumper=_NoAliasDumper, sort_keys=False, allow_unicode=True)
+    s = sub.add_parser("collect", help="pull stats and reconcile relay")
+    s.set_defaults(f=cmd_collect)
 
-
-def _headers(name, base_url, sid):
-    profile = f"веба впн for {name}"
-    return {
-        "profile-title": f"base64:{_b64(profile)}",
-        "profile-update-interval": str(UPDATE_INTERVAL_HOURS),
-        "subscription-userinfo": "upload=0; download=0; total=0; expire=2276640000",
-        "announce": f"base64:{_b64(ANNOUNCE)}",
-        "support-url": SUPPORT_URL,
-        "profile-web-page-url": f"{base_url}/{sid}",
-        "content-disposition": f"attachment; filename*=UTF-8''{urllib.parse.quote(profile)}",
-    }
-
-
-@app.get("/")
-@app.head("/")
-def root():
-    return Response(status_code=418)
-
-
-@app.get("/health")
-@app.head("/health")
-def health():
-    return Response(status_code=200)
-
-
-@app.get("/robots.txt")
-def robots():
-    return PlainTextResponse("User-agent: *\nDisallow: /\n")
-
-
-@app.get("/{sid}")
-@app.head("/{sid}")
-async def subscription(sid: str, request: Request):
-    user = next((u for u in load_users() if u["sid"] == sid), None)
-    if not user:
-        return Response(status_code=418)
-
-    hosts = [h for h in HOSTS if h["name"] in user["hosts"]]
-    base_url = f"{request.url.scheme}://{request.url.netloc}"
-    ua = request.headers.get("user-agent", "")
-    ua_low = ua.lower()
-    accept = request.headers.get("accept", "")
-    headers = _headers(user["name"], base_url, sid)
-
-    if any(k in ua_low for k in _MIHOMO):
-        return PlainTextResponse(
-            _mihomo(user["uuid"], hosts),
-            headers=headers,
-            media_type="application/x-yaml",
-        )
-
-    if "text/html" in accept or any(k in ua for k in _BROWSER):
-        return templates.TemplateResponse(
-            "index.html",
-            {
-                "request": request,
-                "username": user["name"],
-                "sub_url": f"{base_url}/{sid}",
-                "links": _links(user["uuid"], hosts),
-            },
-        )
-
-    body = "\n".join(e["uri"] for e in _links(user["uuid"], hosts))
-    return PlainTextResponse(_b64(body), headers=headers)
+    args = p.parse_args()
+    args.f(args)
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=9999, log_level="info")
+    main()

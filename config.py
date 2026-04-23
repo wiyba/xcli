@@ -5,6 +5,7 @@ SECRETS_DIR = os.environ.get("XCLI_SECRETS_DIR", "/run/secrets")
 USERS_FILE = os.environ.get(
     "XCLI_USERS_FILE", os.path.join(SECRETS_DIR, "xcli-users.json")
 )
+DB_PATH = os.environ.get("XCLI_DB", "/var/lib/xcli/db.sqlite")
 
 FINGERPRINT = "chrome"
 
@@ -52,6 +53,11 @@ HOSTS = [
 
 def load_users():
     return [
-        {"name": name, "uuid": u["uuid"], "sid": u["uuid"][:8], "hosts": u["hosts"]}
+        {
+            "name": name,
+            "uuid": u["uuid"],
+            "sid": u["uuid"][:8],
+            "admin": u.get("admin", False),
+        }
         for name, u in json.load(open(USERS_FILE)).items()
     ]
