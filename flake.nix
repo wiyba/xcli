@@ -9,7 +9,7 @@
     python = pkgs.python3.withPackages (p: with p; [ fastapi uvicorn jinja2 pyyaml ]);
   in {
     packages.${system}.default = pkgs.writeShellScriptBin "xcli" ''
-      exec ${python}/bin/python ${self}/main.py
+      exec ${python}/bin/python ${self}/main.py "$@"
     '';
   };
 }

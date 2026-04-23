@@ -172,7 +172,7 @@
                 <span class="name">{{ l.label }}</span>
                 <div class="right">
                     <span class="ping"></span>
-                    <div class="dot"></div>
+                    <div class="dot{% if l.blocked %} down{% endif %}"></div>
                 </div>
             </div>
             {% endfor %}
