@@ -172,12 +172,15 @@
                 <span class="name">{{ l.label }}</span>
                 <div class="right">
                     <span class="ping"></span>
-                    <div class="dot{% if l.blocked %} down{% endif %}"></div>
+                    <div class="dot"></div>
                 </div>
             </div>
             {% endfor %}
         </div>
-        <div class="footer"><a href="https://t.me/wiybaa">support</a></div>
+        <div class="footer">
+            relay: {{ relay_used }} / {{ quota }} GB<br />
+            <a href="https://t.me/wiybaa">support</a>
+        </div>
         <div class="toast" id="toast">copied</div>
         <script>
             "use strict";
