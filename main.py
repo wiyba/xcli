@@ -1,161 +1,238 @@
 import argparse
+import asyncio
+import base64
+import contextlib
 import json
+import math
 import os
 import sys
-import urllib.request
+import urllib.parse
 
-from config import HOSTS, load_users
-from db import (
-    all_rows,
-    connect,
-    ensure,
-    set_host_bytes,
-    set_relay_enabled,
-    topup,
+import httpx
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+import db
+from config import (
+    AUTH, BROWSERS, DB_PATH, GB, HOSTS, POLL_SEC, RECONCILE_SEC,
+    SUPPORT_URL, USERS_FILE,
 )
 
-GB = 1024**3
-TOKEN_PATH = os.environ.get("XCLI_AGENT_TOKEN_PATH", "/run/secrets/xray-agent")
+DIR = os.path.dirname(__file__)
+usage = {h["name"]: {} for h in HOSTS}
+
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 
-def _sync(conn):
-    ensure(conn, [u["name"] for u in load_users()])
+def adu_payload(user, uuid):
+    return json.dumps({
+        "tag": "vless-tcp",
+        "users": [{"email": user, "account": {"uuid": uuid, "flow": "xtls-rprx-vision"}}],
+    })
 
 
-def cmd_serve(_args):
-    import uvicorn
-
-    from serve import app
-
-    uvicorn.run(app, host="127.0.0.1", port=9999, log_level="info")
-
-
-def _agent(ip, method, path, body=None):
-    token = open(TOKEN_PATH).read().strip()
-    data = None if body is None else json.dumps(body).encode()
-    req = urllib.request.Request(
-        f"http://{ip}{path}",
-        data=data,
-        method=method,
-        headers={
-            "Authorization": "Bearer " + token,
-            "Content-Type": "application/json",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return r.read()
+async def poll_loop(client):
+    while True:
+        for h in HOSTS:
+            with contextlib.suppress(Exception):
+                r = await client.get(f"https://{h['fqdn']}:8443/traffic", headers=AUTH, timeout=10)
+                r.raise_for_status()
+                usage[h["name"]] = {u: int(v) for u, v in r.json().get("users", {}).items()}
+        await asyncio.sleep(POLL_SEC)
 
 
-def cmd_collect(_args):
-    conn = connect()
-    users = {u["name"]: u for u in load_users()}
-    ensure(conn, users.keys())
+async def reconcile_loop(client):
+    while True:
+        await asyncio.sleep(RECONCILE_SEC)
+        with contextlib.suppress(Exception):
+            conn = db.connect(DB_PATH)
+            db.sync(conn, json.load(open(USERS_FILE)))
+            for u in db.all(conn):
+                if u["admin"]:
+                    continue
+                over = math.ceil(usage["relay"].get(u["user"], 0) / GB) > u["quota"]
+                for h in HOSTS:
+                    ok = not u["blocked"] and (h["name"] != "relay" or not over)
+                    url = f"https://{h['fqdn']}:8443"
+                    with contextlib.suppress(Exception):
+                        if ok:
+                            await client.post(f"{url}/adu", headers=AUTH, content=adu_payload(u["user"], u["uuid"]), timeout=10)
+                        else:
+                            await client.post(f"{url}/rmu?tag=vless-tcp", headers=AUTH, content=u["user"], timeout=10)
+            conn.close()
 
-    for h in HOSTS:
-        try:
-            remote = json.loads(_agent(h["server"], "GET", "/usage"))
-            for user, bytes_ in remote.get("users", {}).items():
-                if user in users:
-                    set_host_bytes(conn, user, h["name"], int(bytes_))
-        except Exception as e:
-            print(f"collect {h['name']}: {e}", file=sys.stderr)
 
-    relay_ip = next(h["server"] for h in HOSTS if h["name"] == "relay")
-    for r in all_rows(conn):
-        name = r["user"]
-        u = users.get(name)
-        if not u:
-            continue
-        desired = 1 if u["admin"] or r["limit"] > r["relay"] else 0
-        if desired == r["relay_enabled"]:
-            continue
-        try:
-            if desired:
-                _agent(
-                    relay_ip,
-                    "POST",
-                    "/user",
-                    {"op": "add", "email": name, "uuid": u["uuid"]},
-                )
-            else:
-                _agent(
-                    relay_ip,
-                    "POST",
-                    "/user",
-                    {"op": "remove", "email": name},
-                )
-            set_relay_enabled(conn, name, desired)
-        except Exception as e:
-            print(f"reconcile {name}: {e}", file=sys.stderr)
+def uri_for(user, h):
+    q = urllib.parse.urlencode({
+        "security": "reality", "encryption": "none", "type": "tcp",
+        "flow": "xtls-rprx-vision", "alpn": "h2", "headerType": "none",
+        "pbk": h["pbk"], "sni": h["sni"], "sid": h["sid"], "fp": "chrome",
+    })
+    label = f"{h['flag']} {h['name']}"
+    return f"vless://{user['uuid']}@{h['server']}:443?{q}#{urllib.parse.quote(label)}"
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_):
+    conn = db.connect(DB_PATH)
+    db.sync(conn, json.load(open(USERS_FILE)))
     conn.close()
+    client = httpx.AsyncClient()
+    tasks = [asyncio.create_task(poll_loop(client)), asyncio.create_task(reconcile_loop(client))]
+    try:
+        yield
+    finally:
+        for t in tasks:
+            t.cancel()
+        await client.aclose()
 
 
-def cmd_topup(args):
-    conn = connect()
-    _sync(conn)
-    topup(conn, args.user, int(args.gb * GB))
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=os.path.join(DIR, "static")), name="static")
+templates = Jinja2Templates(directory=DIR)
+
+
+@app.get("/")
+@app.head("/")
+def root():
+    return Response(status_code=418)
+
+
+@app.get("/{sid}")
+@app.head("/{sid}")
+def subscription(sid: str, request: Request):
+    user = next((u for u in json.load(open(USERS_FILE)) if u["uuid"][:8] == sid), None)
+    if not user:
+        return Response(status_code=418)
+
+    conn = db.connect(DB_PATH)
+    row = next((r for r in db.all(conn) if r["user"] == user["user"]), None)
     conn.close()
-    cmd_balance(argparse.Namespace(user=args.user))
+    quota = (row or {}).get("quota", 0)
+    used = math.ceil(usage["relay"].get(user["user"], 0) / GB)
+
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    sub_url = f"{base}/{sid}"
+    links = [{"uri": uri_for(user, h), "label": f"{h['flag']} {h['name']}", "host": h["name"]} for h in HOSTS]
+
+    ua = request.headers.get("user-agent", "")
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept or any(b in ua for b in BROWSERS):
+        return templates.TemplateResponse("index.html", {
+            "request": request, "username": user["user"], "sub_url": sub_url,
+            "links": links, "relay_used": used, "quota": quota,
+        })
+
+    body = "\n".join(e["uri"] for e in links)
+    headers = {
+        "profile-title": "base64:" + base64.b64encode(f"веба впн for {user['user']}".encode()).decode(),
+        "subscription-userinfo": f"upload=0; download={usage['relay'].get(user['user'], 0)}; total={quota * GB}; expire=2276640000",
+        "support-url": SUPPORT_URL,
+    }
+    return PlainTextResponse(base64.b64encode(body.encode()).decode(), headers=headers)
 
 
-def cmd_balance(args):
-    conn = connect()
-    _sync(conn)
-    admins = {u["name"]: u["admin"] for u in load_users()}
-    rows = all_rows(conn)
-    conn.close()
-    if args.user:
-        rows = [r for r in rows if r["user"] == args.user]
-        if not rows:
-            print(f"no such user: {args.user}", file=sys.stderr)
-            sys.exit(1)
+def find(conn, user):
+    row = next((r for r in db.all(conn) if r["user"] == user), None)
+    if not row:
+        sys.exit(f"no such user: {user}")
+    return row
 
-    def fmt(n):
-        return f"{n / GB:.2f}"
 
-    cols = ("user", "admin", "limit", "used(relay)", "london", "stockholm")
-    widths = [len(c) for c in cols]
-    out = []
-    for r in rows:
-        row = (
-            r["user"],
-            "y" if admins.get(r["user"]) else "",
-            fmt(r["limit"]),
-            fmt(r["relay"]),
-            fmt(r["london"]),
-            fmt(r["stockholm"]),
-        )
-        out.append(row)
-        widths = [max(w, len(v)) for w, v in zip(widths, row)]
-
-    fmt_row = lambda r: "  ".join(v.ljust(w) for v, w in zip(r, widths))
-    print(fmt_row(cols))
-    print(fmt_row(["-" * w for w in widths]))
-    for r in out:
-        print(fmt_row(r))
+def fetch_usage():
+    out = {h["name"]: {} for h in HOSTS}
+    with httpx.Client() as c:
+        for h in HOSTS:
+            with contextlib.suppress(Exception):
+                r = c.get(f"https://{h['fqdn']}:8443/traffic", headers=AUTH, timeout=10)
+                r.raise_for_status()
+                out[h["name"]] = r.json().get("users", {})
+    return out
 
 
 def main():
     p = argparse.ArgumentParser(prog="xcli")
     sub = p.add_subparsers(dest="cmd", required=True)
-
-    s = sub.add_parser("serve", help="run subscription server")
-    s.set_defaults(f=cmd_serve)
-
-    s = sub.add_parser("topup", help="add GB to user quota")
-    s.add_argument("user")
-    s.add_argument("gb", type=float)
-    s.set_defaults(f=cmd_topup)
-
-    s = sub.add_parser("balance", help="show balances (GB)")
-    s.add_argument("user", nargs="?")
-    s.set_defaults(f=cmd_balance)
-
-    s = sub.add_parser("collect", help="pull stats and reconcile relay")
-    s.set_defaults(f=cmd_collect)
-
+    sub.add_parser("run")
+    sub.add_parser("ls")
+    sub.add_parser("status")
+    for c in ("block", "unblock", "export"):
+        sub.add_parser(c).add_argument("user")
+    q = sub.add_parser("quota")
+    q.add_argument("user")
+    q.add_argument("amount", help="GB: absolute, +N, or -N")
     args = p.parse_args()
-    args.f(args)
+    cmd = args.cmd
+
+    if cmd == "run":
+        uvicorn.run(app, host="127.0.0.1", port=9999, log_level="info")
+        return
+
+    if cmd == "status":
+        with httpx.Client() as c:
+            for h in HOSTS:
+                try:
+                    ok = c.get(f"https://{h['fqdn']}:8443/", timeout=5).status_code == 200
+                except Exception:
+                    ok = False
+                print(f"{h['name']:12} {'up' if ok else 'down'}")
+        return
+
+    if cmd == "export":
+        user = next((u for u in json.load(open(USERS_FILE)) if u["user"] == args.user), None)
+        if not user:
+            sys.exit(f"no such user: {args.user}")
+        print(f"https://sub.wiyba.org/{user['uuid'][:8]}\n")
+        for h in HOSTS:
+            print(uri_for(user, h))
+        return
+
+    conn = db.connect(DB_PATH)
+    db.sync(conn, json.load(open(USERS_FILE)))
+
+    if cmd == "ls":
+        live = fetch_usage()
+        cols = ["user"] + [h["name"] for h in HOSTS] + ["quota"]
+        widths = [len(c) for c in cols]
+        rows = []
+        for r in db.all(conn):
+            row = [r["user"]] + [str(math.ceil(live[h["name"]].get(r["user"], 0) / GB)) for h in HOSTS] + [str(r["quota"])]
+            rows.append(row)
+            widths = [max(w, len(v)) for w, v in zip(widths, row)]
+        fmt = lambda r: "  ".join(v.ljust(w) for v, w in zip(r, widths))
+        print(fmt(cols))
+        for r in rows:
+            print(fmt(r))
+
+    elif cmd == "quota":
+        row = find(conn, args.user)
+        a = args.amount
+        if a.startswith("+"):
+            new = row["quota"] + int(a[1:])
+        elif a.startswith("-"):
+            new = row["quota"] - int(a[1:])
+        else:
+            new = int(a)
+        db.set_quota(conn, args.user, new)
+        print(f"{args.user}: {row['quota']} -> {new} GB")
+
+    elif cmd in ("block", "unblock"):
+        row = find(conn, args.user)
+        db.set_blocked(conn, args.user, 1 if cmd == "block" else 0)
+        with httpx.Client() as c:
+            for h in HOSTS:
+                url = f"https://{h['fqdn']}:8443"
+                with contextlib.suppress(Exception):
+                    if cmd == "block":
+                        c.post(f"{url}/rmu?tag=vless-tcp", headers=AUTH, content=args.user, timeout=10)
+                    else:
+                        c.post(f"{url}/adu", headers=AUTH, content=adu_payload(row["user"], row["uuid"]), timeout=10)
+        print(f"{args.user}: {cmd}ed")
+
+    conn.close()
 
 
 if __name__ == "__main__":
