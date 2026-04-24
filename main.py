@@ -127,9 +127,10 @@ def subscription(sid: str, request: Request):
         })
 
     body = "\n".join(e["uri"] for e in links)
+    total = 0 if user["admin"] else quota * GB
     headers = {
         "profile-title": "base64:" + base64.b64encode(f"веба впн for {user['user']}".encode()).decode(),
-        "subscription-userinfo": f"upload=0; download={usage['relay'].get(user['user'], 0)}; total={quota * GB}; expire=2276640000",
+        "subscription-userinfo": f"upload=0; download={usage['relay'].get(user['user'], 0)}; total={total}; expire=2276640000",
         "support-url": SUPPORT_URL,
     }
     return PlainTextResponse(base64.b64encode(body.encode()).decode(), headers=headers)
