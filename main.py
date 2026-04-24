@@ -53,7 +53,7 @@ async def reconcile_loop(client):
             for u in db.all(conn):
                 if u["admin"]:
                     continue
-                over = math.ceil(usage["relay"].get(u["user"], 0) / GB) > u["quota"]
+                over = u["quota"] > 0 and math.ceil(usage["relay"].get(u["user"], 0) / GB) > u["quota"]
                 for h in HOSTS:
                     ok = not u["blocked"] and (h["name"] != "relay" or not over)
                     url = f"https://{h['fqdn']}:8443"
@@ -159,6 +159,8 @@ def main():
     sub.add_parser("run")
     sub.add_parser("ls")
     sub.add_parser("status")
+    sub.add_parser("sync")
+    sub.add_parser("poll")
     for c in ("block", "unblock", "export"):
         sub.add_parser(c).add_argument("user")
     q = sub.add_parser("quota")
@@ -181,6 +183,14 @@ def main():
                 print(f"{h['name']:12} {'up' if ok else 'down'}")
         return
 
+    if cmd == "poll":
+        live = fetch_usage()
+        for h in HOSTS:
+            print(f"== {h['name']} ==")
+            for u, v in sorted(live[h["name"]].items(), key=lambda x: -x[1]):
+                print(f"  {u:20} {v / GB:7.2f} GB")
+        return
+
     if cmd == "export":
         user = next((u for u in json.load(open(USERS_FILE)) if u["user"] == args.user), None)
         if not user:
@@ -193,7 +203,10 @@ def main():
     conn = db.connect(DB_PATH)
     db.sync(conn, json.load(open(USERS_FILE)))
 
-    if cmd == "ls":
+    if cmd == "sync":
+        print(f"synced {len(db.all(conn))} users")
+
+    elif cmd == "ls":
         live = fetch_usage()
         cols = ["user"] + [h["name"] for h in HOSTS] + ["quota"]
         widths = [len(c) for c in cols]
