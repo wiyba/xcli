@@ -94,13 +94,11 @@
             }
             .brand {
                 --bg-size: 400%;
-                font-style: italic;
                 background-image: linear-gradient(90deg, var(--accent-to), var(--accent-from), var(--accent-to));
                 background-size: var(--bg-size) 100%;
                 -webkit-background-clip: text;
                 background-clip: text;
                 color: transparent;
-                padding-right: 0.05em;
             }
             @media (prefers-reduced-motion: no-preference) {
                 .brand {
@@ -287,17 +285,19 @@
                 <section class="card">
                     <div class="card-title">subscription</div>
                     <div class="qr-wrap"><canvas id="qr"></canvas></div>
-                </section>
-                <section class="card">
-                    <div class="card-title">links</div>
-                    <div class="rows">
+                    <div class="rows" style="margin-top: 12px">
                         <div class="row" onclick="copy('{{ sub_url }}')">
                             <div class="row-left">
-                                <span class="icon-box">⎘</span>
+                                <span class="icon-box">🔗</span>
                                 <span class="name">copy subscription</span>
                             </div>
                             <span class="hint">URL</span>
                         </div>
+                    </div>
+                </section>
+                <section class="card">
+                    <div class="card-title">links</div>
+                    <div class="rows">
                         {% for l in links %}
                         <div
                             class="row"
