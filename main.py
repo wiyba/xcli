@@ -95,8 +95,17 @@ def placeholder_uri(label):
 
 
 def blocked_links():
-    labels = ["⚠️ blocked"] * len(HOSTS) + ["⚠️ t.me/wiybaa to renew"]
-    return [{"uri": placeholder_uri(lbl), "label": lbl, "host": ""} for lbl in labels]
+    items = (
+        [{"flag": "⚠️", "name": "blocked"}] * len(HOSTS)
+        + [{"flag": "⚠️", "name": "t.me/wiybaa to renew"}]
+    )
+    return [{
+        "uri": placeholder_uri(f"{i['flag']} {i['name']}"),
+        "label": f"{i['flag']} {i['name']}",
+        "flag": i["flag"],
+        "name": i["name"],
+        "host": "",
+    } for i in items]
 
 
 @contextlib.asynccontextmanager
@@ -144,7 +153,13 @@ def subscription(sid: str, request: Request):
     if blocked:
         links = blocked_links()
     else:
-        links = [{"uri": uri_for(user, h), "label": f"{h['flag']} {h['name']}", "host": h["name"]} for h in HOSTS]
+        links = [{
+            "uri": uri_for(user, h),
+            "label": f"{h['flag']} {h['name']}",
+            "flag": h["flag"],
+            "name": h["name"],
+            "host": h["name"],
+        } for h in HOSTS]
 
     ua = request.headers.get("user-agent", "")
     accept = request.headers.get("accept", "")
