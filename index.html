@@ -4,8 +4,10 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="robots" content="noindex,nofollow" />
+        <meta name="theme-color" content="#4E54C8" />
         <title>веба впн</title>
-        <link rel="icon" href="/static/favicon.ico" />
+        <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+        <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
         <link
             href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600&display=swap"
             rel="stylesheet"
@@ -15,6 +17,22 @@
             rel="stylesheet"
         />
         <style>
+            :root {
+                --bg: #0a0a0a;
+                --bg-elev: #121212;
+                --bg-elev-2: #171717;
+                --border: #262626;
+                --border-soft: #1c1c1c;
+                --text: #dcdcdc;
+                --text-dim: #a3a3a3;
+                --text-mute: #525252;
+                --text-faint: #404040;
+                --accent-from: #8f94fb;
+                --accent-to: #4e54c8;
+                --up: #34d399;
+                --down: #f87171;
+                --warn: #fbbf24;
+            }
             * {
                 margin: 0;
                 padding: 0;
@@ -25,30 +43,92 @@
                 overscroll-behavior: none;
             }
             body {
-                font-family: "JetBrains Mono", monospace;
-                background: rgb(10, 10, 10);
-                color: #dcdcdc;
+                font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+                background: var(--bg);
+                color: var(--text);
+                font-size: 14px;
+                line-height: 1.55;
+                min-height: 100vh;
+                position: relative;
+                overflow-x: hidden;
+                -webkit-font-smoothing: antialiased;
+                text-rendering: optimizeLegibility;
+            }
+            ::selection {
+                background: rgb(143 148 251 / 0.25);
+                color: #fff;
+            }
+            .bg-grid {
+                position: fixed;
+                inset: 0;
+                background:
+                    linear-gradient(to right, rgba(128, 128, 128, 0.063) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(128, 128, 128, 0.063) 1px, transparent 1px);
+                background-size: 24px 24px;
+                -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+                mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+                pointer-events: none;
+                z-index: 0;
+            }
+            main {
+                position: relative;
+                z-index: 1;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 padding: 48px 16px 16px;
             }
             h1 {
-                font-family: "Unbounded", sans-serif;
+                font-family: "Unbounded", ui-sans-serif, system-ui, sans-serif;
                 font-size: 22px;
+                font-weight: 600;
                 color: #fff;
                 display: flex;
                 align-items: center;
                 gap: 10px;
             }
             h1 img {
-                width: 28px;
-                height: 28px;
+                width: 32px;
+                height: 32px;
+                border-radius: 8px;
             }
             .sub {
-                font-size: 13px;
-                color: #525252;
-                margin-top: 6px;
+                font-size: 12px;
+                color: var(--text-mute);
+                margin-top: 8px;
+            }
+            .nick {
+                --bg-size: 400%;
+                font-style: italic;
+                font-weight: 600;
+                background-image: linear-gradient(90deg, var(--accent-to), var(--accent-from), var(--accent-to));
+                background-size: var(--bg-size) 100%;
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+                padding-right: 0.08em;
+            }
+            @media (prefers-reduced-motion: no-preference) {
+                .nick {
+                    animation: nick-shift 6s linear infinite;
+                }
+            }
+            @keyframes nick-shift {
+                to {
+                    background-position: var(--bg-size) 0;
+                }
+            }
+            .blocked-banner {
+                margin-top: 24px;
+                width: 100%;
+                max-width: 480px;
+                background: color-mix(in oklab, var(--warn) 5%, transparent);
+                border: 1.5px dotted color-mix(in oklab, var(--warn) 25%, transparent);
+                color: var(--warn);
+                border-radius: 12px;
+                padding: 14px 18px;
+                font-size: 12px;
+                text-align: center;
             }
             .list {
                 margin-top: 32px;
@@ -56,34 +136,53 @@
                 max-width: 480px;
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
+                gap: 10px;
+            }
+            .lbl {
+                font-size: 10.5px;
+                font-weight: 500;
+                color: var(--text-mute);
+                text-transform: uppercase;
+                letter-spacing: 0.14em;
+                margin-top: 18px;
+                margin-bottom: 2px;
+            }
+            .lbl:first-child {
+                margin-top: 0;
             }
             .qr-tile {
-                background: rgb(18, 18, 18);
-                border: 1px solid rgb(38, 38, 38);
-                border-radius: 10px;
+                background: var(--bg-elev);
+                border: 1px solid var(--border-soft);
+                border-radius: 12px;
                 padding: 24px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
             }
             .row {
-                background: rgb(18, 18, 18);
-                border: 1px solid rgb(38, 38, 38);
-                border-radius: 10px;
+                background: var(--bg-elev);
+                border: 1px solid var(--border-soft);
+                border-radius: 12px;
                 padding: 14px 18px;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 cursor: pointer;
-                transition: border-color 0.15s;
+                transition:
+                    border-color 0.15s,
+                    background 0.15s,
+                    transform 0.05s;
             }
             .row:hover {
-                border-color: rgb(64, 64, 64);
+                border-color: #333;
+                background: var(--bg-elev-2);
+            }
+            .row:active {
+                transform: translateY(1px);
             }
             .name {
-                font-size: 14px;
-                color: #a3a3a3;
+                font-size: 13px;
+                color: var(--text);
             }
             .right {
                 display: flex;
@@ -91,54 +190,48 @@
                 gap: 10px;
             }
             .ping {
-                font-size: 12px;
-                color: #525252;
+                font-size: 11px;
+                color: var(--text-mute);
+                font-variant-numeric: tabular-nums;
             }
             .dot {
-                width: 9px;
-                height: 9px;
+                width: 7px;
+                height: 7px;
                 border-radius: 50%;
+                background: var(--text-faint);
             }
             .dot.up {
-                background: #34d399;
-                box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+                background: var(--up);
             }
             .dot.down {
-                background: #f87171;
-                box-shadow: 0 0 6px rgba(248, 113, 113, 0.5);
-            }
-            .lbl {
-                font-size: 11px;
-                color: #404040;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                margin-top: 24px;
-                margin-bottom: 4px;
-            }
-            .lbl:first-child {
-                margin-top: 0;
+                background: var(--down);
             }
             .footer {
                 margin-top: 28px;
                 font-size: 11px;
-                color: #404040;
+                color: var(--text-faint);
                 text-align: center;
                 line-height: 1.6;
             }
             .footer a {
-                color: #404040;
+                color: inherit;
                 text-decoration: none;
+                border-bottom: 1px dotted transparent;
+                transition: border-color 0.15s;
+            }
+            .footer a:hover {
+                border-bottom-color: currentColor;
             }
             .toast {
                 position: fixed;
                 bottom: 24px;
                 left: 50%;
                 transform: translateX(-50%) translateY(20px);
-                background: rgb(18, 18, 18);
-                border: 1px solid rgb(38, 38, 38);
-                color: #a3a3a3;
-                padding: 8px 20px;
-                border-radius: 8px;
+                background: var(--bg-elev);
+                border: 1px solid var(--border);
+                color: var(--text-dim);
+                padding: 10px 22px;
+                border-radius: 12px;
                 font-size: 12px;
                 opacity: 0;
                 transition:
@@ -154,33 +247,41 @@
         </style>
     </head>
     <body>
-        <h1><img src="/static/favicon.ico" alt="" />веба впн</h1>
-        <div class="sub">for {{ username }}</div>
-        <div class="list">
-            <div class="lbl">subscription</div>
-            <div class="qr-tile"><canvas id="qr"></canvas></div>
-            <div class="row" onclick="copy('{{ sub_url }}')">
-                <span class="name">copy subscription</span>
+        <div class="bg-grid"></div>
+        <main>
+            <h1><img src="/static/apple-touch-icon.png" alt="" />веба впн</h1>
+            <div class="sub">for <span class="nick">{{ username }}</span></div>
+            {% if blocked %}
+            <div class="blocked-banner">
+                ⚠️ сабка заблокирована, обратитесь по ссылке ниже
             </div>
-            <div class="lbl">links</div>
-            {% for l in links %}
-            <div
-                class="row"
-                onclick="copy('{{ l.uri }}')"
-                data-name="{{ l.host }}"
-            >
-                <span class="name">{{ l.label }}</span>
-                <div class="right">
-                    <span class="ping"></span>
-                    <div class="dot"></div>
+            {% endif %}
+            <div class="list">
+                <div class="lbl">subscription</div>
+                <div class="qr-tile"><canvas id="qr"></canvas></div>
+                <div class="row" onclick="copy('{{ sub_url }}')">
+                    <span class="name">copy subscription</span>
                 </div>
+                <div class="lbl">links</div>
+                {% for l in links %}
+                <div
+                    class="row"
+                    onclick="copy('{{ l.uri }}')"
+                    data-name="{{ l.host }}"
+                >
+                    <span class="name">{{ l.label }}</span>
+                    <div class="right">
+                        <span class="ping"></span>
+                        <div class="dot"></div>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
-        </div>
-        <div class="footer">
-            relay: {{ relay_used }} / {{ quota }} GB<br />
-            <a href="https://t.me/wiybaa">support</a>
-        </div>
+            <div class="footer">
+                relay: {{ relay_used }} / {{ quota }} GB<br />
+                <a href="https://t.me/wiybaa">support</a>
+            </div>
+        </main>
         <div class="toast" id="toast">copied</div>
         <script>
             "use strict";
