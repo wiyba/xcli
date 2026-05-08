@@ -172,6 +172,14 @@ def parse_ts(ts):
     return ts / 1e9 if ts > 10**11 else float(ts)
 
 
+def ago(secs):
+    secs = int(secs)
+    if secs < 60: return f"{secs}s"
+    if secs < 3600: return f"{secs//60}m {secs%60}s"
+    if secs < 86400: return f"{secs//3600}h {(secs%3600)//60}m"
+    return f"{secs//86400}d {(secs%86400)//3600}h"
+
+
 def print_table(rows):
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     for r in rows:
@@ -234,7 +242,7 @@ def main():
                     for ip, ts in sorted(iplist[user].items(), key=lambda x: -int(x[1])):
                         secs = parse_ts(ts)
                         dt = datetime.datetime.fromtimestamp(secs).strftime("%Y-%m-%d %H:%M:%S")
-                        print(f"    {ip:<40}  {dt}  ({int(now - secs)}s ago)")
+                        print(f"    {ip:<40}  {dt}  ({ago(now - secs)} ago)")
             return
 
         if args.field in ("inbounds", "outbounds"):
