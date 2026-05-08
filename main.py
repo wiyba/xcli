@@ -84,6 +84,21 @@ def uri_for(user, h):
     return f"vless://{user['uuid']}@{h['server']}:443?{q}#{urllib.parse.quote(label)}"
 
 
+def placeholder_uri(label):
+    q = urllib.parse.urlencode({
+        "security": "reality", "encryption": "none", "type": "tcp",
+        "flow": "xtls-rprx-vision", "alpn": "h2", "headerType": "none",
+        "pbk": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "sni": "example.com", "sid": "00000000", "fp": "chrome",
+    })
+    return f"vless://00000000-0000-0000-0000-000000000000@0.0.0.0:443?{q}#{urllib.parse.quote(label)}"
+
+
+def blocked_links():
+    labels = ["⚠️ blocked"] * len(HOSTS) + ["⚠️ t.me/wiybaa", "⚠️ to renew"]
+    return [{"uri": placeholder_uri(lbl), "label": lbl, "host": ""} for lbl in labels]
+
+
 @contextlib.asynccontextmanager
 async def lifespan(_):
     conn = db.connect(DB_PATH)
@@ -121,24 +136,29 @@ def subscription(sid: str, request: Request):
     row = next((r for r in db.all(conn) if r["user"] == user["user"]), None)
     conn.close()
     quota = (row or {}).get("quota", 0)
+    blocked = bool((row or {}).get("blocked", 0))
     used = math.ceil(usage["relay"].get(user["user"], 0) / GB)
 
     base = f"{request.url.scheme}://{request.url.netloc}"
     sub_url = f"{base}/{sid}"
-    links = [{"uri": uri_for(user, h), "label": f"{h['flag']} {h['name']}", "host": h["name"]} for h in HOSTS]
+    if blocked:
+        links = blocked_links()
+    else:
+        links = [{"uri": uri_for(user, h), "label": f"{h['flag']} {h['name']}", "host": h["name"]} for h in HOSTS]
 
     ua = request.headers.get("user-agent", "")
     accept = request.headers.get("accept", "")
     if "text/html" in accept or any(b in ua for b in BROWSERS):
         return templates.TemplateResponse("index.html", {
             "request": request, "username": user["user"], "sub_url": sub_url,
-            "links": links, "relay_used": used, "quota": quota,
+            "links": links, "relay_used": used, "quota": quota, "blocked": blocked,
         })
 
     body = "\n".join(e["uri"] for e in links)
     total = 0 if user["admin"] else quota * GB
+    title = f"⚠️ веба впн for {user['user']}" if blocked else f"веба впн for {user['user']}"
     headers = {
-        "profile-title": "base64:" + base64.b64encode(f"веба впн for {user['user']}".encode()).decode(),
+        "profile-title": "base64:" + base64.b64encode(title.encode()).decode(),
         "subscription-userinfo": f"upload=0; download={usage['relay'].get(user['user'], 0)}; total={total}; expire=2276640000",
         "support-url": SUPPORT_URL,
     }
@@ -272,9 +292,17 @@ def main():
         user = next((u for u in json.load(open(USERS_FILE)) if u["user"] == args.user), None)
         if not user:
             sys.exit(f"no such user: {args.user}")
-        print(f"https://sub.wiyba.org/{user['uuid'][:8]}\n")
-        for h in HOSTS:
-            print(uri_for(user, h))
+        conn = db.connect(DB_PATH)
+        row = next((r for r in db.all(conn) if r["user"] == args.user), None)
+        conn.close()
+        blocked = bool((row or {}).get("blocked", 0))
+        print(f"https://sub.wiyba.org/{user['uuid'][:8]}{' [BLOCKED]' if blocked else ''}\n")
+        if blocked:
+            for link in blocked_links():
+                print(link["uri"])
+        else:
+            for h in HOSTS:
+                print(uri_for(user, h))
         return
 
     conn = db.connect(DB_PATH)
@@ -287,10 +315,11 @@ def main():
         live = fetch_all()
         users = {h["name"]: live[h["name"]].get("users", {}) for h in HOSTS}
         online = {h["name"]: live[h["name"]].get("online", {}) for h in HOSTS}
-        rows = [["on", "user"] + [h["name"] for h in HOSTS] + ["quota"]]
+        rows = [["on", "b", "user"] + [h["name"] for h in HOSTS] + ["quota"]]
         for r in db.all(conn):
             on = "".join(h["name"][0] for h in HOSTS if int(online[h["name"]].get(r["user"], 0)) > 0) or "-"
-            row = [on, r["user"]] + [str(math.ceil(users[h["name"]].get(r["user"], 0) / GB)) for h in HOSTS] + [str(r["quota"])]
+            b = "⚠️" if r["blocked"] else "-"
+            row = [on, b, r["user"]] + [str(math.ceil(users[h["name"]].get(r["user"], 0) / GB)) for h in HOSTS] + [str(r["quota"])]
             rows.append(row)
         print_table(rows)
 
