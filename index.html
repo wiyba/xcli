@@ -153,6 +153,9 @@
                 border-radius: 10px;
                 padding: 24px;
             }
+            .qr-wrap + .rows {
+                margin-top: 12px;
+            }
             .rows {
                 display: flex;
                 flex-direction: column;
@@ -285,7 +288,7 @@
                 <section class="card">
                     <div class="card-title">subscription</div>
                     <div class="qr-wrap"><canvas id="qr"></canvas></div>
-                    <div class="rows" style="margin-top: 12px">
+                    <div class="rows">
                         <div class="row" onclick="copy('{{ sub_url }}')">
                             <div class="row-left">
                                 <span class="icon-box">🔗</span>
