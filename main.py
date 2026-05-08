@@ -2,10 +2,12 @@ import argparse
 import asyncio
 import base64
 import contextlib
+import datetime
 import json
 import math
 import os
 import sys
+import time
 import urllib.parse
 
 import httpx
@@ -29,8 +31,15 @@ os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 def adu_payload(user, uuid):
     return json.dumps({
-        "tag": "vless-tcp",
-        "users": [{"email": user, "account": {"uuid": uuid, "flow": "xtls-rprx-vision"}}],
+        "inbounds": [{
+            "tag": "vless-tcp",
+            "port": 443,
+            "protocol": "vless",
+            "settings": {
+                "decryption": "none",
+                "clients": [{"email": user, "id": uuid, "flow": "xtls-rprx-vision"}],
+            },
+        }],
     })
 
 
@@ -143,15 +152,30 @@ def find(conn, user):
     return row
 
 
-def fetch_usage():
+def fetch_all():
     out = {h["name"]: {} for h in HOSTS}
     with httpx.Client() as c:
         for h in HOSTS:
             with contextlib.suppress(Exception):
                 r = c.get(f"https://{h['fqdn']}:8443/traffic", headers=AUTH, timeout=10)
                 r.raise_for_status()
-                out[h["name"]] = r.json().get("users", {})
+                out[h["name"]] = r.json()
     return out
+
+
+def fetch_usage():
+    return {h: data.get("users", {}) for h, data in fetch_all().items()}
+
+
+def parse_ts(ts):
+    ts = int(ts)
+    return ts / 1e9 if ts > 10**11 else float(ts)
+
+
+def print_table(rows):
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    for r in rows:
+        print("  ".join(v.ljust(w) for v, w in zip(r, widths)))
 
 
 def main():
@@ -159,7 +183,10 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("run")
     sub.add_parser("ls")
-    sub.add_parser("status")
+    sub.add_parser("status").add_argument(
+        "field", nargs="?",
+        help="online | ips | inbounds | outbounds (omit for server health)",
+    )
     sub.add_parser("sync")
     sub.add_parser("poll")
     for c in ("block", "unblock", "export"):
@@ -175,14 +202,55 @@ def main():
         return
 
     if cmd == "status":
-        with httpx.Client() as c:
+        if not args.field:
+            with httpx.Client() as c:
+                for h in HOSTS:
+                    try:
+                        ok = c.get(f"https://{h['fqdn']}:8443/", timeout=5).status_code == 200
+                    except Exception:
+                        ok = False
+                    print(f"{h['name']:12} {'up' if ok else 'down'}")
+            return
+
+        live = fetch_all()
+
+        if args.field == "online":
+            users = sorted({u for h in HOSTS for u in live[h["name"]].get("online", {})})
+            rows = [["user"] + [h["name"] for h in HOSTS]]
+            for u in users:
+                rows.append([u] + [str(live[h["name"]].get("online", {}).get(u, 0)) for h in HOSTS])
+            print_table(rows)
+            return
+
+        if args.field == "ips":
+            now = time.time()
             for h in HOSTS:
-                try:
-                    ok = c.get(f"https://{h['fqdn']}:8443/", timeout=5).status_code == 200
-                except Exception:
-                    ok = False
-                print(f"{h['name']:12} {'up' if ok else 'down'}")
-        return
+                iplist = live[h["name"]].get("iplist", {})
+                if not iplist:
+                    continue
+                print(f"== {h['name']} ==")
+                for user in sorted(iplist):
+                    print(f"  {user}")
+                    for ip, ts in sorted(iplist[user].items(), key=lambda x: -int(x[1])):
+                        secs = parse_ts(ts)
+                        dt = datetime.datetime.fromtimestamp(secs).strftime("%Y-%m-%d %H:%M:%S")
+                        print(f"    {ip:<40}  {dt}  ({int(now - secs)}s ago)")
+            return
+
+        if args.field in ("inbounds", "outbounds"):
+            tags = sorted({t for h in HOSTS for t in live[h["name"]].get(args.field, {})})
+            rows = [["tag"] + [h["name"] for h in HOSTS]]
+            for t in tags:
+                row = [t]
+                for h in HOSTS:
+                    e = live[h["name"]].get(args.field, {}).get(t, {})
+                    up, dn = e.get("uplink", 0), e.get("downlink", 0)
+                    row.append(f"{up/GB:.2f}↑/{dn/GB:.2f}↓")
+                rows.append(row)
+            print_table(rows)
+            return
+
+        sys.exit(f"unknown field: {args.field}. options: online, ips, inbounds, outbounds")
 
     if cmd == "poll":
         live = fetch_usage()
@@ -208,18 +276,15 @@ def main():
         print(f"synced {len(db.all(conn))} users")
 
     elif cmd == "ls":
-        live = fetch_usage()
-        cols = ["user"] + [h["name"] for h in HOSTS] + ["quota"]
-        widths = [len(c) for c in cols]
-        rows = []
+        live = fetch_all()
+        users = {h["name"]: live[h["name"]].get("users", {}) for h in HOSTS}
+        online = {h["name"]: live[h["name"]].get("online", {}) for h in HOSTS}
+        rows = [["on", "user"] + [h["name"] for h in HOSTS] + ["quota"]]
         for r in db.all(conn):
-            row = [r["user"]] + [str(math.ceil(live[h["name"]].get(r["user"], 0) / GB)) for h in HOSTS] + [str(r["quota"])]
+            on = "".join(h["name"][0] for h in HOSTS if int(online[h["name"]].get(r["user"], 0)) > 0) or "-"
+            row = [on, r["user"]] + [str(math.ceil(users[h["name"]].get(r["user"], 0) / GB)) for h in HOSTS] + [str(r["quota"])]
             rows.append(row)
-            widths = [max(w, len(v)) for w, v in zip(widths, row)]
-        fmt = lambda r: "  ".join(v.ljust(w) for v, w in zip(r, widths))
-        print(fmt(cols))
-        for r in rows:
-            print(fmt(r))
+        print_table(rows)
 
     elif cmd == "quota":
         row = find(conn, args.user)
