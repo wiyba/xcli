@@ -95,7 +95,7 @@ def placeholder_uri(label):
 
 
 def blocked_links():
-    labels = ["⚠️ blocked"] * len(HOSTS) + ["⚠️ t.me/wiybaa", "⚠️ to renew"]
+    labels = ["⚠️ blocked"] * len(HOSTS) + ["⚠️ t.me/wiybaa to renew"]
     return [{"uri": placeholder_uri(lbl), "label": lbl, "host": ""} for lbl in labels]
 
 
