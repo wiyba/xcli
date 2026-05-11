@@ -1,8 +1,16 @@
 import os
+import socket
 
 
 def read(name):
     return open(f"/run/secrets/{name}").read().strip()
+
+
+def resolve(fqdn):
+    try:
+        return socket.gethostbyname(fqdn)
+    except (socket.gaierror, OSError):
+        return fqdn
 
 
 SUPPORT_URL = "https://t.me/wiybaa"
@@ -18,7 +26,6 @@ HOSTS = [
     {
         "name": "relay",
         "fqdn": "relay.wiyba.org",
-        "server": "REDACTED",
         "flag": "\U0001f1f7\U0001f1fa",
         "sni": "yandex.ru",
         "pbk": read("xray-relay-key-pub"),
@@ -27,7 +34,6 @@ HOSTS = [
     {
         "name": "london",
         "fqdn": "london.wiyba.org",
-        "server": "REDACTED",
         "flag": "\U0001f1ec\U0001f1e7",
         "sni": "vk.com",
         "pbk": read("xray-london-key-pub"),
@@ -36,10 +42,12 @@ HOSTS = [
     {
         "name": "stockholm",
         "fqdn": "stockholm.wiyba.org",
-        "server": "REDACTED",
         "flag": "\U0001f1f8\U0001f1ea",
         "sni": "vk.com",
         "pbk": read("xray-stockholm-key-pub"),
         "sid": read("xray-stockholm-sid"),
     },
 ]
+
+for _h in HOSTS:
+    _h["server"] = resolve(_h["fqdn"])
