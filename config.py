@@ -17,10 +17,19 @@ SUPPORT_URL = "https://t.me/wiybaa"
 DB_PATH = os.environ.get("XCLI_DB", "/var/lib/xcli/db.sqlite")
 USERS_FILE = "/run/secrets/xray-users.json"
 AUTH = {"Authorization": "Bearer " + read("xray-admin")}
-GB = 1024 ** 3
+GB = 1024**3
 POLL_SEC = 60
 RECONCILE_SEC = 600
-BROWSERS = ("Mozilla", "Chrome", "Safari", "Firefox", "Opera", "Edge", "TelegramBot", "WhatsApp")
+BROWSERS = (
+    "Mozilla",
+    "Chrome",
+    "Safari",
+    "Firefox",
+    "Opera",
+    "Edge",
+    "TelegramBot",
+    "WhatsApp",
+)
 
 HOSTS = [
     {
@@ -46,6 +55,14 @@ HOSTS = [
         "sni": "vk.com",
         "pbk": read("xray-stockholm-key-pub"),
         "sid": read("xray-stockholm-sid"),
+    },
+    {
+        "name": "helsinki",
+        "fqdn": "helsinki.wiyba.org",
+        "flag": "\U0001f1eb\U0001f1ee",
+        "sni": "www.google.com",
+        "pbk": read("xray-helsinki-key-pub"),
+        "sid": read("xray-helsinki-sid"),
     },
 ]
 
