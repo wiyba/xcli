@@ -41,6 +41,14 @@ HOSTS = [
         "sid": read("xray-relay-sid"),
     },
     {
+        "name": "moscow",
+        "fqdn": "moscow.wiyba.org",
+        "flag": "\U0001f1f7\U0001f1fa",
+        "sni": "vk.com",
+        "pbk": read("xray-moscow-key-pub"),
+        "sid": read("xray-moscow-sid"),
+    },
+    {
         "name": "london",
         "fqdn": "london.wiyba.org",
         "flag": "\U0001f1ec\U0001f1e7",
