@@ -19,8 +19,15 @@ from fastapi.templating import Jinja2Templates
 
 import db
 from config import (
-    AUTH, BROWSERS, DB_PATH, GB, HOSTS, POLL_SEC, RECONCILE_SEC,
-    SUPPORT_URL, USERS_FILE,
+    AUTH,
+    BROWSERS,
+    DB_PATH,
+    GB,
+    HOSTS,
+    POLL_SEC,
+    RECONCILE_SEC,
+    SUPPORT_URL,
+    USERS_FILE,
 )
 
 DIR = os.path.dirname(__file__)
@@ -30,26 +37,36 @@ os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 
 def adu_payload(user, uuid):
-    return json.dumps({
-        "inbounds": [{
-            "tag": "vless-tcp",
-            "port": 443,
-            "protocol": "vless",
-            "settings": {
-                "decryption": "none",
-                "clients": [{"email": user, "id": uuid, "flow": "xtls-rprx-vision"}],
-            },
-        }],
-    })
+    return json.dumps(
+        {
+            "inbounds": [
+                {
+                    "tag": "vless-tcp",
+                    "port": 443,
+                    "protocol": "vless",
+                    "settings": {
+                        "decryption": "none",
+                        "clients": [
+                            {"email": user, "id": uuid, "flow": "xtls-rprx-vision"}
+                        ],
+                    },
+                }
+            ],
+        }
+    )
 
 
 async def poll_loop(client):
     while True:
         for h in HOSTS:
             with contextlib.suppress(Exception):
-                r = await client.get(f"https://{h['fqdn']}:8443/traffic", headers=AUTH, timeout=10)
+                r = await client.get(
+                    f"https://{h['fqdn']}:8443/traffic", headers=AUTH, timeout=10
+                )
                 r.raise_for_status()
-                usage[h["name"]] = {u: int(v) for u, v in r.json().get("users", {}).items()}
+                usage[h["name"]] = {
+                    u: int(v) for u, v in r.json().get("users", {}).items()
+                }
         await asyncio.sleep(POLL_SEC)
 
 
@@ -62,50 +79,82 @@ async def reconcile_loop(client):
             for u in db.all(conn):
                 if u["admin"]:
                     continue
-                over = u["quota"] > 0 and math.ceil(usage["relay"].get(u["user"], 0) / GB) > u["quota"]
+                over = (
+                    u["quota"] > 0
+                    and math.ceil(usage["relay"].get(u["user"], 0) / GB) > u["quota"]
+                )
                 for h in HOSTS:
                     ok = not u["blocked"] and (h["name"] != "relay" or not over)
                     url = f"https://{h['fqdn']}:8443"
                     with contextlib.suppress(Exception):
                         if ok:
-                            await client.post(f"{url}/adu", headers=AUTH, content=adu_payload(u["user"], u["uuid"]), timeout=10)
+                            await client.post(
+                                f"{url}/adu",
+                                headers=AUTH,
+                                content=adu_payload(u["user"], u["uuid"]),
+                                timeout=10,
+                            )
                         else:
-                            await client.post(f"{url}/rmu?tag=vless-tcp", headers=AUTH, content=u["user"], timeout=10)
+                            await client.post(
+                                f"{url}/rmu?tag=vless-tcp",
+                                headers=AUTH,
+                                content=u["user"],
+                                timeout=10,
+                            )
             conn.close()
 
 
 def uri_for(user, h):
-    q = urllib.parse.urlencode({
-        "security": "reality", "encryption": "none", "type": "tcp",
-        "flow": "xtls-rprx-vision", "alpn": "h2", "headerType": "none",
-        "pbk": h["pbk"], "sni": h["sni"], "sid": h["sid"], "fp": "chrome",
-    })
+    q = urllib.parse.urlencode(
+        {
+            "security": "reality",
+            "encryption": "none",
+            "type": "tcp",
+            "flow": "xtls-rprx-vision",
+            "alpn": "h2",
+            "headerType": "none",
+            "pbk": h["pbk"],
+            "sni": h["sni"],
+            "sid": h["sid"],
+            "fp": "firefox",
+        }
+    )
     label = f"{h['flag']} {h['name']}"
     return f"vless://{user['uuid']}@{h['server']}:443?{q}#{urllib.parse.quote(label)}"
 
 
 def placeholder_uri(label):
-    q = urllib.parse.urlencode({
-        "security": "reality", "encryption": "none", "type": "tcp",
-        "flow": "xtls-rprx-vision", "alpn": "h2", "headerType": "none",
-        "pbk": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "sni": "example.com", "sid": "00000000", "fp": "chrome",
-    })
+    q = urllib.parse.urlencode(
+        {
+            "security": "reality",
+            "encryption": "none",
+            "type": "tcp",
+            "flow": "xtls-rprx-vision",
+            "alpn": "h2",
+            "headerType": "none",
+            "pbk": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "sni": "example.com",
+            "sid": "00000000",
+            "fp": "firefox",
+        }
+    )
     return f"vless://00000000-0000-0000-0000-000000000000@0.0.0.0:443?{q}#{urllib.parse.quote(label)}"
 
 
 def blocked_links():
-    items = (
-        [{"flag": "⚠️", "name": "blocked"}] * len(HOSTS)
-        + [{"flag": "⚠️", "name": "t.me/wiybaa to renew"}]
-    )
-    return [{
-        "uri": placeholder_uri(f"{i['flag']} {i['name']}"),
-        "label": f"{i['flag']} {i['name']}",
-        "flag": i["flag"],
-        "name": i["name"],
-        "host": "",
-    } for i in items]
+    items = [{"flag": "⚠️", "name": "blocked"}] * len(HOSTS) + [
+        {"flag": "⚠️", "name": "t.me/wiybaa to renew"}
+    ]
+    return [
+        {
+            "uri": placeholder_uri(f"{i['flag']} {i['name']}"),
+            "label": f"{i['flag']} {i['name']}",
+            "flag": i["flag"],
+            "name": i["name"],
+            "host": "",
+        }
+        for i in items
+    ]
 
 
 @contextlib.asynccontextmanager
@@ -114,7 +163,10 @@ async def lifespan(_):
     db.sync(conn, json.load(open(USERS_FILE)))
     conn.close()
     client = httpx.AsyncClient()
-    tasks = [asyncio.create_task(poll_loop(client)), asyncio.create_task(reconcile_loop(client))]
+    tasks = [
+        asyncio.create_task(poll_loop(client)),
+        asyncio.create_task(reconcile_loop(client)),
+    ]
     try:
         yield
     finally:
@@ -153,25 +205,38 @@ def subscription(sid: str, request: Request):
     if blocked:
         links = blocked_links()
     else:
-        links = [{
-            "uri": uri_for(user, h),
-            "label": f"{h['flag']} {h['name']}",
-            "flag": h["flag"],
-            "name": h["name"],
-            "host": h["name"],
-        } for h in HOSTS]
+        links = [
+            {
+                "uri": uri_for(user, h),
+                "label": f"{h['flag']} {h['name']}",
+                "flag": h["flag"],
+                "name": h["name"],
+                "host": h["name"],
+            }
+            for h in HOSTS
+        ]
 
     ua = request.headers.get("user-agent", "")
     accept = request.headers.get("accept", "")
     if "text/html" in accept or any(b in ua for b in BROWSERS):
-        return templates.TemplateResponse("index.html", {
-            "request": request, "username": user["user"], "sub_url": sub_url,
-            "links": links, "relay_used": used, "quota": quota, "blocked": blocked,
-        })
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "username": user["user"],
+                "sub_url": sub_url,
+                "links": links,
+                "relay_used": used,
+                "quota": quota,
+                "blocked": blocked,
+            },
+        )
 
     body = "\n".join(e["uri"] for e in links)
     total = 0 if user["admin"] else quota * GB
-    title = f"⚠️ веба впн for {user['user']}" if blocked else f"веба впн for {user['user']}"
+    title = (
+        f"⚠️ веба впн for {user['user']}" if blocked else f"веба впн for {user['user']}"
+    )
     headers = {
         "profile-title": "base64:" + base64.b64encode(title.encode()).decode(),
         "subscription-userinfo": f"upload=0; download={usage['relay'].get(user['user'], 0)}; total={total}; expire=2276640000",
@@ -209,10 +274,13 @@ def parse_ts(ts):
 
 def ago(secs):
     secs = int(secs)
-    if secs < 60: return f"{secs}s"
-    if secs < 3600: return f"{secs//60}m {secs%60}s"
-    if secs < 86400: return f"{secs//3600}h {(secs%3600)//60}m"
-    return f"{secs//86400}d {(secs%86400)//3600}h"
+    if secs < 60:
+        return f"{secs}s"
+    if secs < 3600:
+        return f"{secs // 60}m {secs % 60}s"
+    if secs < 86400:
+        return f"{secs // 3600}h {(secs % 3600) // 60}m"
+    return f"{secs // 86400}d {(secs % 86400) // 3600}h"
 
 
 def print_table(rows):
@@ -227,7 +295,8 @@ def main():
     sub.add_parser("run")
     sub.add_parser("ls")
     sub.add_parser("status").add_argument(
-        "field", nargs="?",
+        "field",
+        nargs="?",
         help="online | ips | inbounds | outbounds (omit for server health)",
     )
     sub.add_parser("sync")
@@ -249,7 +318,10 @@ def main():
             with httpx.Client() as c:
                 for h in HOSTS:
                     try:
-                        ok = c.get(f"https://{h['fqdn']}:8443/", timeout=5).status_code == 200
+                        ok = (
+                            c.get(f"https://{h['fqdn']}:8443/", timeout=5).status_code
+                            == 200
+                        )
                     except Exception:
                         ok = False
                     print(f"{h['name']:12} {'up' if ok else 'down'}")
@@ -258,10 +330,15 @@ def main():
         live = fetch_all()
 
         if args.field == "online":
-            users = sorted({u for h in HOSTS for u in live[h["name"]].get("online", {})})
+            users = sorted(
+                {u for h in HOSTS for u in live[h["name"]].get("online", {})}
+            )
             rows = [["user"] + [h["name"] for h in HOSTS]]
             for u in users:
-                rows.append([u] + [str(live[h["name"]].get("online", {}).get(u, 0)) for h in HOSTS])
+                rows.append(
+                    [u]
+                    + [str(live[h["name"]].get("online", {}).get(u, 0)) for h in HOSTS]
+                )
             print_table(rows)
             return
 
@@ -274,26 +351,34 @@ def main():
                 print(f"== {h['name']} ==")
                 for user in sorted(iplist):
                     print(f"  {user}")
-                    for ip, ts in sorted(iplist[user].items(), key=lambda x: -int(x[1])):
+                    for ip, ts in sorted(
+                        iplist[user].items(), key=lambda x: -int(x[1])
+                    ):
                         secs = parse_ts(ts)
-                        dt = datetime.datetime.fromtimestamp(secs).strftime("%Y-%m-%d %H:%M:%S")
+                        dt = datetime.datetime.fromtimestamp(secs).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
                         print(f"    {ip:<40}  {dt}  ({ago(now - secs)} ago)")
             return
 
         if args.field in ("inbounds", "outbounds"):
-            tags = sorted({t for h in HOSTS for t in live[h["name"]].get(args.field, {})})
+            tags = sorted(
+                {t for h in HOSTS for t in live[h["name"]].get(args.field, {})}
+            )
             rows = [["tag"] + [h["name"] for h in HOSTS]]
             for t in tags:
                 row = [t]
                 for h in HOSTS:
                     e = live[h["name"]].get(args.field, {}).get(t, {})
                     up, dn = e.get("uplink", 0), e.get("downlink", 0)
-                    row.append(f"{up/GB:.2f}↑/{dn/GB:.2f}↓")
+                    row.append(f"{up / GB:.2f}↑/{dn / GB:.2f}↓")
                 rows.append(row)
             print_table(rows)
             return
 
-        sys.exit(f"unknown field: {args.field}. options: online, ips, inbounds, outbounds")
+        sys.exit(
+            f"unknown field: {args.field}. options: online, ips, inbounds, outbounds"
+        )
 
     if cmd == "poll":
         live = fetch_usage()
@@ -304,14 +389,18 @@ def main():
         return
 
     if cmd == "export":
-        user = next((u for u in json.load(open(USERS_FILE)) if u["user"] == args.user), None)
+        user = next(
+            (u for u in json.load(open(USERS_FILE)) if u["user"] == args.user), None
+        )
         if not user:
             sys.exit(f"no such user: {args.user}")
         conn = db.connect(DB_PATH)
         row = next((r for r in db.all(conn) if r["user"] == args.user), None)
         conn.close()
         blocked = bool((row or {}).get("blocked", 0))
-        print(f"https://sub.wiyba.org/{user['uuid'][:8]}{' [BLOCKED]' if blocked else ''}\n")
+        print(
+            f"https://sub.wiyba.org/{user['uuid'][:8]}{' [BLOCKED]' if blocked else ''}\n"
+        )
         if blocked:
             for link in blocked_links():
                 print(link["uri"])
@@ -332,9 +421,23 @@ def main():
         online = {h["name"]: live[h["name"]].get("online", {}) for h in HOSTS}
         rows = [["on", "b", "user"] + [h["name"] for h in HOSTS] + ["quota"]]
         for r in db.all(conn):
-            on = "".join(h["name"][0] for h in HOSTS if int(online[h["name"]].get(r["user"], 0)) > 0) or "-"
+            on = (
+                "".join(
+                    h["name"][0]
+                    for h in HOSTS
+                    if int(online[h["name"]].get(r["user"], 0)) > 0
+                )
+                or "-"
+            )
             b = "⚠️" if r["blocked"] else "-"
-            row = [on, b, r["user"]] + [str(math.ceil(users[h["name"]].get(r["user"], 0) / GB)) for h in HOSTS] + [str(r["quota"])]
+            row = (
+                [on, b, r["user"]]
+                + [
+                    str(math.ceil(users[h["name"]].get(r["user"], 0) / GB))
+                    for h in HOSTS
+                ]
+                + [str(r["quota"])]
+            )
             rows.append(row)
         print_table(rows)
 
@@ -358,9 +461,19 @@ def main():
                 url = f"https://{h['fqdn']}:8443"
                 with contextlib.suppress(Exception):
                     if cmd == "block":
-                        c.post(f"{url}/rmu?tag=vless-tcp", headers=AUTH, content=args.user, timeout=10)
+                        c.post(
+                            f"{url}/rmu?tag=vless-tcp",
+                            headers=AUTH,
+                            content=args.user,
+                            timeout=10,
+                        )
                     else:
-                        c.post(f"{url}/adu", headers=AUTH, content=adu_payload(row["user"], row["uuid"]), timeout=10)
+                        c.post(
+                            f"{url}/adu",
+                            headers=AUTH,
+                            content=adu_payload(row["user"], row["uuid"]),
+                            timeout=10,
+                        )
         print(f"{args.user}: {cmd}ed")
 
     conn.close()
