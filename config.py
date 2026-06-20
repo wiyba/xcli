@@ -33,38 +33,6 @@ BROWSERS = (
 
 HOSTS = [
     {
-        "name": "relay",
-        "fqdn": "relay.wiyba.org",
-        "flag": "\U0001f1f7\U0001f1fa",
-        "sni": "yandex.ru",
-        "pbk": read("xray-relay-key-pub"),
-        "sid": read("xray-relay-sid"),
-    },
-    {
-        "name": "moscow",
-        "fqdn": "moscow.wiyba.org",
-        "flag": "\U0001f1f7\U0001f1fa",
-        "sni": "yandex.ru",
-        "pbk": read("xray-moscow-key-pub"),
-        "sid": read("xray-moscow-sid"),
-    },
-    {
-        "name": "london",
-        "fqdn": "london.wiyba.org",
-        "flag": "\U0001f1ec\U0001f1e7",
-        "sni": "www.google.com",
-        "pbk": read("xray-london-key-pub"),
-        "sid": read("xray-london-sid"),
-    },
-    {
-        "name": "stockholm",
-        "fqdn": "stockholm.wiyba.org",
-        "flag": "\U0001f1f8\U0001f1ea",
-        "sni": "www.google.com",
-        "pbk": read("xray-stockholm-key-pub"),
-        "sid": read("xray-stockholm-sid"),
-    },
-    {
         "name": "helsinki",
         "fqdn": "helsinki.wiyba.org",
         "flag": "\U0001f1eb\U0001f1ee",
@@ -72,7 +40,23 @@ HOSTS = [
         "pbk": read("xray-helsinki-key-pub"),
         "sid": read("xray-helsinki-sid"),
     },
+    {
+        "name": "stockholm",
+        "fqdn": "stockholm.wiyba.org",
+        "flag": "\U0001f1f8\U0001f1ea",
+        "sni": "stockholm.wiyba.org",
+        "pbk": read("xray-stockholm-key-pub"),
+        "sid": read("xray-stockholm-sid"),
+    },
+    {
+        "name": "home",
+        "fqdn": "home.wiyba.org",
+        "flag": "\U0001f3e0",
+        "sni": "home.wiyba.org",
+        "pbk": read("xray-home-key-pub"),
+        "sid": read("xray-home-sid"),
+    },
 ]
 
 for _h in HOSTS:
-    _h["server"] = resolve(_h["fqdn"])
+    _h["server"] = _h["fqdn"] if _h["name"] == "home" else resolve(_h["fqdn"])

@@ -33,6 +33,10 @@ from config import (
 DIR = os.path.dirname(__file__)
 usage = {h["name"]: {} for h in HOSTS}
 
+
+def used_bytes(name):
+    return sum(usage[h["name"]].get(name, 0) for h in HOSTS)
+
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 
@@ -42,7 +46,7 @@ def adu_payload(user, uuid):
             "inbounds": [
                 {
                     "tag": "vless-tcp",
-                    "port": 443,
+                    "port": 8443,
                     "protocol": "vless",
                     "settings": {
                         "decryption": "none",
@@ -61,7 +65,7 @@ async def poll_loop(client):
         for h in HOSTS:
             with contextlib.suppress(Exception):
                 r = await client.get(
-                    f"https://{h['fqdn']}:8443/traffic", headers=AUTH, timeout=10
+                    f"https://{h['fqdn']}:443/traffic", headers=AUTH, timeout=10
                 )
                 r.raise_for_status()
                 usage[h["name"]] = {
@@ -81,11 +85,11 @@ async def reconcile_loop(client):
                     continue
                 over = (
                     u["quota"] > 0
-                    and math.ceil(usage["relay"].get(u["user"], 0) / GB) > u["quota"]
+                    and math.ceil(used_bytes(u["user"]) / GB) > u["quota"]
                 )
                 for h in HOSTS:
-                    ok = not u["blocked"] and (h["name"] != "relay" or not over)
-                    url = f"https://{h['fqdn']}:8443"
+                    ok = not u["blocked"] and not over
+                    url = f"https://{h['fqdn']}:443"
                     with contextlib.suppress(Exception):
                         if ok:
                             await client.post(
@@ -120,7 +124,7 @@ def uri_for(user, h):
         }
     )
     label = f"{h['flag']} {h['name']}"
-    return f"vless://{user['uuid']}@{h['server']}:443?{q}#{urllib.parse.quote(label)}"
+    return f"vless://{user['uuid']}@{h['server']}:8443?{q}#{urllib.parse.quote(label)}"
 
 
 def placeholder_uri(label):
@@ -138,7 +142,7 @@ def placeholder_uri(label):
             "fp": "firefox",
         }
     )
-    return f"vless://00000000-0000-0000-0000-000000000000@0.0.0.0:443?{q}#{urllib.parse.quote(label)}"
+    return f"vless://00000000-0000-0000-0000-000000000000@0.0.0.0:8443?{q}#{urllib.parse.quote(label)}"
 
 
 def blocked_links():
@@ -198,7 +202,7 @@ def subscription(sid: str, request: Request):
     conn.close()
     quota = (row or {}).get("quota", 0)
     blocked = bool((row or {}).get("blocked", 0))
-    used = math.ceil(usage["relay"].get(user["user"], 0) / GB)
+    used = math.ceil(used_bytes(user["user"]) / GB)
 
     base = f"{request.url.scheme}://{request.url.netloc}"
     sub_url = f"{base}/{sid}"
@@ -239,7 +243,7 @@ def subscription(sid: str, request: Request):
     )
     headers = {
         "profile-title": "base64:" + base64.b64encode(title.encode()).decode(),
-        "subscription-userinfo": f"upload=0; download={usage['relay'].get(user['user'], 0)}; total={total}; expire=2276640000",
+        "subscription-userinfo": f"upload=0; download={used_bytes(user['user'])}; total={total}; expire=2276640000",
         "support-url": SUPPORT_URL,
     }
     return PlainTextResponse(base64.b64encode(body.encode()).decode(), headers=headers)
@@ -257,7 +261,7 @@ def fetch_all():
     with httpx.Client() as c:
         for h in HOSTS:
             with contextlib.suppress(Exception):
-                r = c.get(f"https://{h['fqdn']}:8443/traffic", headers=AUTH, timeout=10)
+                r = c.get(f"https://{h['fqdn']}:443/traffic", headers=AUTH, timeout=10)
                 r.raise_for_status()
                 out[h["name"]] = r.json()
     return out
@@ -319,7 +323,7 @@ def main():
                 for h in HOSTS:
                     try:
                         ok = (
-                            c.get(f"https://{h['fqdn']}:8443/", timeout=5).status_code
+                            c.get(f"https://{h['fqdn']}:443/", timeout=5).status_code
                             == 200
                         )
                     except Exception:
@@ -458,7 +462,7 @@ def main():
         db.set_blocked(conn, args.user, 1 if cmd == "block" else 0)
         with httpx.Client() as c:
             for h in HOSTS:
-                url = f"https://{h['fqdn']}:8443"
+                url = f"https://{h['fqdn']}:443"
                 with contextlib.suppress(Exception):
                     if cmd == "block":
                         c.post(
