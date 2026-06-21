@@ -60,13 +60,31 @@ def adu_payload(user, uuid):
     )
 
 
+def admin_req(c, h, method, path, **kw):
+    last = None
+    for port in (443, 8443):
+        try:
+            return c.request(method, f"https://{h['fqdn']}:{port}{path}", **kw)
+        except httpx.HTTPError as e:
+            last = e
+    raise last
+
+
+async def admin_areq(c, h, method, path, **kw):
+    last = None
+    for port in (443, 8443):
+        try:
+            return await c.request(method, f"https://{h['fqdn']}:{port}{path}", **kw)
+        except httpx.HTTPError as e:
+            last = e
+    raise last
+
+
 async def poll_loop(client):
     while True:
         for h in HOSTS:
             with contextlib.suppress(Exception):
-                r = await client.get(
-                    f"https://{h['fqdn']}:443/traffic", headers=AUTH, timeout=10
-                )
+                r = await admin_areq(client, h, "GET", "/traffic", headers=AUTH, timeout=10)
                 r.raise_for_status()
                 usage[h["name"]] = {
                     u: int(v) for u, v in r.json().get("users", {}).items()
@@ -89,18 +107,17 @@ async def reconcile_loop(client):
                 )
                 for h in HOSTS:
                     ok = not u["blocked"] and not over
-                    url = f"https://{h['fqdn']}:443"
                     with contextlib.suppress(Exception):
                         if ok:
-                            await client.post(
-                                f"{url}/adu",
+                            await admin_areq(
+                                client, h, "POST", "/adu",
                                 headers=AUTH,
                                 content=adu_payload(u["user"], u["uuid"]),
                                 timeout=10,
                             )
                         else:
-                            await client.post(
-                                f"{url}/rmu?tag=vless-tcp",
+                            await admin_areq(
+                                client, h, "POST", "/rmu?tag=vless-tcp",
                                 headers=AUTH,
                                 content=u["user"],
                                 timeout=10,
@@ -261,7 +278,7 @@ def fetch_all():
     with httpx.Client() as c:
         for h in HOSTS:
             with contextlib.suppress(Exception):
-                r = c.get(f"https://{h['fqdn']}:443/traffic", headers=AUTH, timeout=10)
+                r = admin_req(c, h, "GET", "/traffic", headers=AUTH, timeout=10)
                 r.raise_for_status()
                 out[h["name"]] = r.json()
     return out
@@ -323,7 +340,7 @@ def main():
                 for h in HOSTS:
                     try:
                         ok = (
-                            c.get(f"https://{h['fqdn']}:443/", timeout=5).status_code
+                            admin_req(c, h, "GET", "/", timeout=5).status_code
                             == 200
                         )
                     except Exception:
@@ -462,18 +479,17 @@ def main():
         db.set_blocked(conn, args.user, 1 if cmd == "block" else 0)
         with httpx.Client() as c:
             for h in HOSTS:
-                url = f"https://{h['fqdn']}:443"
                 with contextlib.suppress(Exception):
                     if cmd == "block":
-                        c.post(
-                            f"{url}/rmu?tag=vless-tcp",
+                        admin_req(
+                            c, h, "POST", "/rmu?tag=vless-tcp",
                             headers=AUTH,
                             content=args.user,
                             timeout=10,
                         )
                     else:
-                        c.post(
-                            f"{url}/adu",
+                        admin_req(
+                            c, h, "POST", "/adu",
                             headers=AUTH,
                             content=adu_payload(row["user"], row["uuid"]),
                             timeout=10,
