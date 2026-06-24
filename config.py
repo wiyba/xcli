@@ -19,7 +19,6 @@ USERS_FILE = "/run/secrets/xray-users.json"
 AUTH = {"Authorization": "Bearer " + read("xray-admin")}
 GB = 1024**3
 POLL_SEC = 60
-RECONCILE_SEC = 600
 BROWSERS = (
     "Mozilla",
     "Chrome",
@@ -51,7 +50,7 @@ HOSTS = [
     {
         "name": "home",
         "fqdn": "home.wiyba.org",
-        "flag": "\U0001f3e0",
+        "flag": "\U0001f1f7\U0001f1fa",
         "sni": "home.wiyba.org",
         "pbk": read("xray-home-key-pub"),
         "sid": read("xray-home-sid"),

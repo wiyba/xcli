@@ -25,7 +25,6 @@ from config import (
     GB,
     HOSTS,
     POLL_SEC,
-    RECONCILE_SEC,
     SUPPORT_URL,
     USERS_FILE,
 )
@@ -36,6 +35,7 @@ usage = {h["name"]: {} for h in HOSTS}
 
 def used_bytes(name):
     return sum(usage[h["name"]].get(name, 0) for h in HOSTS)
+
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
@@ -62,7 +62,7 @@ def adu_payload(user, uuid):
 
 def admin_req(c, h, method, path, **kw):
     last = None
-    for port in (443, 8443):
+    for port in (8443, 443):
         try:
             return c.request(method, f"https://{h['fqdn']}:{port}{path}", **kw)
         except httpx.HTTPError as e:
@@ -72,7 +72,7 @@ def admin_req(c, h, method, path, **kw):
 
 async def admin_areq(c, h, method, path, **kw):
     last = None
-    for port in (443, 8443):
+    for port in (8443, 443):
         try:
             return await c.request(method, f"https://{h['fqdn']}:{port}{path}", **kw)
         except httpx.HTTPError as e:
@@ -80,49 +80,68 @@ async def admin_areq(c, h, method, path, **kw):
     raise last
 
 
+def canonical_users():
+    users = json.load(open(USERS_FILE))
+    if not users:
+        return {}, set(), False
+    conn = db.connect(DB_PATH)
+    try:
+        db.sync(conn, users)
+        blocked = {r["user"] for r in db.all(conn) if r["blocked"]}
+    finally:
+        conn.close()
+    admins = {u["user"] for u in users if u["admin"]}
+    managed = {
+        u["user"]: u["uuid"]
+        for u in users
+        if not u["admin"] and u["user"] not in blocked
+    }
+    return managed, admins, True
+
+
 async def poll_loop(client):
     while True:
+        try:
+            managed, admins, ok = canonical_users()
+        except Exception:
+            managed, admins, ok = {}, set(), False
         for h in HOSTS:
-            with contextlib.suppress(Exception):
-                r = await admin_areq(client, h, "GET", "/traffic", headers=AUTH, timeout=10)
-                r.raise_for_status()
-                usage[h["name"]] = {
-                    u: int(v) for u, v in r.json().get("users", {}).items()
-                }
-        await asyncio.sleep(POLL_SEC)
-
-
-async def reconcile_loop(client):
-    while True:
-        await asyncio.sleep(RECONCILE_SEC)
-        with contextlib.suppress(Exception):
-            conn = db.connect(DB_PATH)
-            db.sync(conn, json.load(open(USERS_FILE)))
-            for u in db.all(conn):
-                if u["admin"]:
-                    continue
-                over = (
-                    u["quota"] > 0
-                    and math.ceil(used_bytes(u["user"]) / GB) > u["quota"]
+            try:
+                r = await admin_areq(
+                    client, h, "GET", "/traffic", headers=AUTH, timeout=10
                 )
-                for h in HOSTS:
-                    ok = not u["blocked"] and not over
+                r.raise_for_status()
+                data = r.json()
+            except Exception:
+                continue
+            present = {u: int(v) for u, v in data.get("users", {}).items()}
+            usage[h["name"]] = present
+            if not ok:
+                continue
+            for user, uuid in managed.items():
+                if user not in present:
                     with contextlib.suppress(Exception):
-                        if ok:
-                            await admin_areq(
-                                client, h, "POST", "/adu",
-                                headers=AUTH,
-                                content=adu_payload(u["user"], u["uuid"]),
-                                timeout=10,
-                            )
-                        else:
-                            await admin_areq(
-                                client, h, "POST", "/rmu?tag=vless-tcp",
-                                headers=AUTH,
-                                content=u["user"],
-                                timeout=10,
-                            )
-            conn.close()
+                        await admin_areq(
+                            client,
+                            h,
+                            "POST",
+                            "/adu",
+                            headers=AUTH,
+                            content=adu_payload(user, uuid),
+                            timeout=10,
+                        )
+            for user in set(present) - set(managed) - admins:
+                with contextlib.suppress(Exception):
+                    await admin_areq(
+                        client,
+                        h,
+                        "POST",
+                        "/rmu?tag=vless-tcp",
+                        headers=AUTH,
+                        content=user,
+                        timeout=10,
+                    )
+        await asyncio.sleep(POLL_SEC)
 
 
 def uri_for(user, h):
@@ -184,10 +203,7 @@ async def lifespan(_):
     db.sync(conn, json.load(open(USERS_FILE)))
     conn.close()
     client = httpx.AsyncClient()
-    tasks = [
-        asyncio.create_task(poll_loop(client)),
-        asyncio.create_task(reconcile_loop(client)),
-    ]
+    tasks = [asyncio.create_task(poll_loop(client))]
     try:
         yield
     finally:
@@ -217,9 +233,7 @@ def subscription(sid: str, request: Request):
     conn = db.connect(DB_PATH)
     row = next((r for r in db.all(conn) if r["user"] == user["user"]), None)
     conn.close()
-    quota = (row or {}).get("quota", 0)
     blocked = bool((row or {}).get("blocked", 0))
-    used = math.ceil(used_bytes(user["user"]) / GB)
 
     base = f"{request.url.scheme}://{request.url.netloc}"
     sub_url = f"{base}/{sid}"
@@ -247,20 +261,17 @@ def subscription(sid: str, request: Request):
                 "username": user["user"],
                 "sub_url": sub_url,
                 "links": links,
-                "relay_used": used,
-                "quota": quota,
                 "blocked": blocked,
             },
         )
 
     body = "\n".join(e["uri"] for e in links)
-    total = 0 if user["admin"] else quota * GB
     title = (
         f"⚠️ веба впн for {user['user']}" if blocked else f"веба впн for {user['user']}"
     )
     headers = {
         "profile-title": "base64:" + base64.b64encode(title.encode()).decode(),
-        "subscription-userinfo": f"upload=0; download={used_bytes(user['user'])}; total={total}; expire=2276640000",
+        "subscription-userinfo": f"upload=0; download={used_bytes(user['user'])}; total=0; expire=2276640000",
         "support-url": SUPPORT_URL,
     }
     return PlainTextResponse(base64.b64encode(body.encode()).decode(), headers=headers)
@@ -324,9 +335,6 @@ def main():
     sub.add_parser("poll")
     for c in ("block", "unblock", "export"):
         sub.add_parser(c).add_argument("user")
-    q = sub.add_parser("quota")
-    q.add_argument("user")
-    q.add_argument("amount", help="GB: absolute, +N, or -N")
     args = p.parse_args()
     cmd = args.cmd
 
@@ -339,10 +347,7 @@ def main():
             with httpx.Client() as c:
                 for h in HOSTS:
                     try:
-                        ok = (
-                            admin_req(c, h, "GET", "/", timeout=5).status_code
-                            == 200
-                        )
+                        ok = admin_req(c, h, "GET", "/", timeout=5).status_code == 200
                     except Exception:
                         ok = False
                     print(f"{h['name']:12} {'up' if ok else 'down'}")
@@ -440,7 +445,7 @@ def main():
         live = fetch_all()
         users = {h["name"]: live[h["name"]].get("users", {}) for h in HOSTS}
         online = {h["name"]: live[h["name"]].get("online", {}) for h in HOSTS}
-        rows = [["on", "b", "user"] + [h["name"] for h in HOSTS] + ["quota"]]
+        rows = [["on", "b", "user"] + [h["name"] for h in HOSTS]]
         for r in db.all(conn):
             on = (
                 "".join(
@@ -451,28 +456,11 @@ def main():
                 or "-"
             )
             b = "⚠️" if r["blocked"] else "-"
-            row = (
-                [on, b, r["user"]]
-                + [
-                    str(math.ceil(users[h["name"]].get(r["user"], 0) / GB))
-                    for h in HOSTS
-                ]
-                + [str(r["quota"])]
-            )
+            row = [on, b, r["user"]] + [
+                str(math.ceil(users[h["name"]].get(r["user"], 0) / GB)) for h in HOSTS
+            ]
             rows.append(row)
         print_table(rows)
-
-    elif cmd == "quota":
-        row = find(conn, args.user)
-        a = args.amount
-        if a.startswith("+"):
-            new = row["quota"] + int(a[1:])
-        elif a.startswith("-"):
-            new = row["quota"] - int(a[1:])
-        else:
-            new = int(a)
-        db.set_quota(conn, args.user, new)
-        print(f"{args.user}: {row['quota']} -> {new} GB")
 
     elif cmd in ("block", "unblock"):
         row = find(conn, args.user)
@@ -482,14 +470,20 @@ def main():
                 with contextlib.suppress(Exception):
                     if cmd == "block":
                         admin_req(
-                            c, h, "POST", "/rmu?tag=vless-tcp",
+                            c,
+                            h,
+                            "POST",
+                            "/rmu?tag=vless-tcp",
                             headers=AUTH,
                             content=args.user,
                             timeout=10,
                         )
                     else:
                         admin_req(
-                            c, h, "POST", "/adu",
+                            c,
+                            h,
+                            "POST",
+                            "/adu",
                             headers=AUTH,
                             content=adu_payload(row["user"], row["uuid"]),
                             timeout=10,

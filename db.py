@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS users (
     user    TEXT PRIMARY KEY,
     uuid    TEXT NOT NULL,
     admin   INTEGER NOT NULL DEFAULT 0,
-    quota   INTEGER NOT NULL DEFAULT 0,
     blocked INTEGER NOT NULL DEFAULT 0
 );
 """
@@ -36,11 +35,6 @@ def sync(conn, users):
 
 def all(conn):
     return [dict(r) for r in conn.execute("SELECT * FROM users ORDER BY user")]
-
-
-def set_quota(conn, user, value):
-    conn.execute("UPDATE users SET quota = ? WHERE user = ?", (value, user))
-    conn.commit()
 
 
 def set_blocked(conn, user, value):
