@@ -21,6 +21,8 @@ impl Traffic {
 pub struct Usage {
     pub users: BTreeMap<String, Traffic>,
     #[serde(default)]
+    pub seen: BTreeMap<String, u64>,
+    #[serde(default)]
     pub online: Vec<String>,
     pub collected_at: u64,
 }

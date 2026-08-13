@@ -5,6 +5,7 @@ mod links;
 mod remote;
 mod serve;
 mod state;
+mod xray;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -29,6 +30,7 @@ enum Cmd {
     Serve,
     Ls,
     Status,
+    Sync,
     Block { user: String },
     Unblock { user: String },
     Export { user: String },
@@ -43,6 +45,7 @@ async fn main() -> Result<()> {
         Cmd::Serve => serve::run(cfg).await,
         Cmd::Ls => cli::ls(&cfg).await,
         Cmd::Status => cli::status(&cfg).await,
+        Cmd::Sync => cli::sync(&cfg).await,
         Cmd::Block { user } => cli::set_blocked(&cfg, &user, true).await,
         Cmd::Unblock { user } => cli::set_blocked(&cfg, &user, false).await,
         Cmd::Export { user } => cli::export(&cfg, &user).await,

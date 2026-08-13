@@ -14,10 +14,11 @@
         version = "0.1.0";
         src = self;
         cargoLock.lockFile = ./Cargo.lock;
+        nativeBuildInputs = [ pkgs.protobuf ];
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc rustfmt clippy rust-analyzer ];
+        packages = with pkgs; [ cargo rustc rustfmt clippy rust-analyzer protobuf ];
       };
     };
 }

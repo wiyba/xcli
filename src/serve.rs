@@ -103,7 +103,7 @@ async fn subscription(
         state::load::<BTreeSet<String>>(&app.cfg.state_dir, "blocked.json").contains(&user.user);
     let hosts = app.hosts.read().await.clone();
     let links = if blocked {
-        blocked_links(hosts.len())
+        blocked_links()
     } else {
         user_links(user, &hosts)
     };

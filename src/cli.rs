@@ -9,7 +9,20 @@ use crate::links;
 use crate::remote;
 use crate::state;
 
-const GB: u64 = 1 << 30;
+fn human(bytes: u64) -> String {
+    match [
+        ("T", 1u64 << 40),
+        ("G", 1 << 30),
+        ("M", 1 << 20),
+        ("K", 1 << 10),
+    ]
+    .into_iter()
+    .find(|(_, size)| bytes >= *size)
+    {
+        Some((unit, size)) => format!("{:.1}{unit}", bytes as f64 / size as f64),
+        None => bytes.to_string(),
+    }
+}
 
 fn client() -> Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
@@ -68,10 +81,7 @@ pub async fn ls(cfg: &Config) -> Result<()> {
             u.user.clone(),
         ];
         row.extend(usages.iter().map(|usage| match usage {
-            Some(usage) => {
-                let total = usage.users.get(&u.user).map(|t| t.total()).unwrap_or(0);
-                total.div_ceil(GB).to_string()
-            }
+            Some(usage) => human(usage.users.get(&u.user).map(|t| t.total()).unwrap_or(0)),
             None => "?".to_string(),
         }));
         rows.push(row);
@@ -97,24 +107,36 @@ pub async fn set_blocked(cfg: &Config, user: &str, blocked: bool) -> Result<()> 
         .user(user)
         .with_context(|| format!("no such user: {user}"))?;
     ensure!(!(blocked && u.admin), "cannot block admin: {user}");
-    let path = if blocked { "/block" } else { "/unblock" };
+    broadcast(cfg, if blocked { "/block" } else { "/unblock" }, Some(user)).await
+}
+
+pub async fn sync(cfg: &Config) -> Result<()> {
+    broadcast(cfg, "/sync", None).await
+}
+
+async fn broadcast(cfg: &Config, path: &str, body: Option<&str>) -> Result<()> {
     let c = client()?;
+    let mut failed = Vec::new();
     for h in &cfg.hosts {
-        match remote::request(
-            &c,
-            &cfg.token,
-            h,
-            Method::POST,
-            path,
-            Some(user.to_string()),
-        )
-        .await
-        {
+        let body = body.map(str::to_string);
+        match remote::request(&c, &cfg.token, h, Method::POST, path, body).await {
             Ok(r) if r.status().is_success() => println!("{}: ok", h.name),
-            Ok(r) => println!("{}: {}", h.name, r.status()),
-            Err(e) => println!("{}: {e:#}", h.name),
+            Ok(r) => {
+                println!(
+                    "{}: {} {}",
+                    h.name,
+                    r.status(),
+                    r.text().await.unwrap_or_default()
+                );
+                failed.push(h.name.clone());
+            }
+            Err(e) => {
+                println!("{}: {e:#}", h.name);
+                failed.push(h.name.clone());
+            }
         }
     }
+    ensure!(failed.is_empty(), "not applied on: {}", failed.join(", "));
     Ok(())
 }
 
@@ -129,7 +151,7 @@ pub async fn export(cfg: &Config, user: &str) -> Result<()> {
     let mark = if blocked { " [BLOCKED]" } else { "" };
     println!("https://{}/{sid}{mark}\n", cfg.sub_domain);
     let links = if blocked {
-        links::blocked_links(cfg.hosts.len())
+        links::blocked_links()
     } else {
         links::user_links(u, &cfg.hosts)
     };
