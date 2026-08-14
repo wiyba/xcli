@@ -22,7 +22,14 @@ pub struct Config {
     pub hosts: Vec<Host>,
     pub users: Vec<User>,
     #[serde(default)]
-    pub machines: Vec<String>,
+    pub machines: Vec<Machine>,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct Machine {
+    pub name: String,
+    #[serde(default)]
+    pub client: bool,
 }
 
 #[derive(Clone, Deserialize)]

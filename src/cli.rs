@@ -63,7 +63,12 @@ pub async fn ls(cfg: &Config) -> Result<()> {
     let mut header = vec!["on".to_string(), "b".to_string(), "user".to_string()];
     header.extend(cfg.hosts.iter().map(|h| h.name.clone()));
     let mut rows = vec![header];
-    for u in &cfg.users {
+    let names = cfg
+        .users
+        .iter()
+        .map(|u| &u.user)
+        .chain(cfg.machines.iter().filter(|m| m.client).map(|m| &m.name));
+    for name in names {
         let on: String = cfg
             .hosts
             .iter()
@@ -71,17 +76,17 @@ pub async fn ls(cfg: &Config) -> Result<()> {
             .filter(|(_, usage)| {
                 usage
                     .as_ref()
-                    .is_some_and(|usage| usage.online.iter().any(|o| o == &u.user))
+                    .is_some_and(|usage| usage.online.iter().any(|o| o == name))
             })
             .filter_map(|(h, _)| h.name.chars().next())
             .collect();
         let mut row = vec![
             if on.is_empty() { "-".to_string() } else { on },
-            if blocked.contains(&u.user) { "b" } else { "-" }.to_string(),
-            u.user.clone(),
+            if blocked.contains(name) { "b" } else { "-" }.to_string(),
+            name.clone(),
         ];
         row.extend(usages.iter().map(|usage| match usage {
-            Some(usage) => human(usage.users.get(&u.user).map(|t| t.total()).unwrap_or(0)),
+            Some(usage) => human(usage.users.get(name).map(|t| t.total()).unwrap_or(0)),
             None => "?".to_string(),
         }));
         rows.push(row);
