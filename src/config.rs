@@ -21,6 +21,8 @@ pub struct Config {
     pub xray_api: String,
     pub hosts: Vec<Host>,
     pub users: Vec<User>,
+    #[serde(default)]
+    pub machines: Vec<String>,
 }
 
 #[derive(Clone, Deserialize)]

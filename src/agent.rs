@@ -191,10 +191,9 @@ async fn sync(agent: &Agent) -> Result<()> {
             .await?;
         println!("+ {}", u.user);
     }
-    for email in actual
-        .iter()
-        .filter(|e| !desired.iter().any(|u| &u.user == *e))
-    {
+    for email in actual.iter().filter(|e| {
+        !desired.iter().any(|u| &u.user == *e) && !agent.cfg.machines.contains(e)
+    }) {
         agent.xray.remove_user(&agent.tag, email).await?;
         println!("- {email}");
     }
