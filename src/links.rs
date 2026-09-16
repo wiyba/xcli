@@ -35,7 +35,7 @@ pub fn user_links(user: &User, hosts: &[Host]) -> Vec<Entry> {
                 "{}://{}@{}:{}?{}",
                 h.link.scheme,
                 user.uuid,
-                h.addr.as_deref().unwrap_or(&h.fqdn),
+                h.addr.as_deref().unwrap_or(&h.endpoint),
                 h.link.port,
                 query.join("&")
             );

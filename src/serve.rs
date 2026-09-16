@@ -188,22 +188,22 @@ async fn resolve_task(app: Arc<App>) {
         .iter()
         .enumerate()
         .filter(|(_, h)| h.addr.is_none())
-        .map(|(i, h)| (i, h.fqdn.clone()))
+        .map(|(i, h)| (i, h.endpoint.clone()))
         .collect();
     if dynamic.is_empty() {
         return;
     }
     loop {
-        for (i, fqdn) in &dynamic {
-            match remote::doh_resolve(&app.client, fqdn).await {
+        for (i, endpoint) in &dynamic {
+            match remote::doh_resolve(&app.client, endpoint).await {
                 Ok(ip) => {
                     let mut hosts = app.hosts.write().await;
                     if hosts[*i].addr.as_deref() != Some(ip.as_str()) {
-                        eprintln!("resolved {fqdn} -> {ip}");
+                        eprintln!("resolved {endpoint} -> {ip}");
                         hosts[*i].addr = Some(ip);
                     }
                 }
-                Err(e) => eprintln!("resolve {fqdn}: {e:#}"),
+                Err(e) => eprintln!("resolve {endpoint}: {e:#}"),
             }
         }
         let unresolved = app.hosts.read().await.iter().any(|h| h.addr.is_none());

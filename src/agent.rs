@@ -17,6 +17,7 @@ use crate::state::{self, Usage};
 use crate::xray::Xray;
 
 const TICK: Duration = Duration::from_secs(60);
+const RETRY: Duration = Duration::from_secs(3);
 const DEBOUNCE: Duration = Duration::from_secs(3);
 const ONLINE_TTL: u64 = 180;
 
@@ -129,13 +130,16 @@ async fn set_blocked(agent: &Agent, user: &str, blocked: bool) -> Response {
 }
 
 async fn tick_loop(agent: Arc<Agent>) {
-    let mut tick = tokio::time::interval(TICK);
+    let mut synced = false;
     loop {
-        tick.tick().await;
-        if let Err(e) = sync(&agent).await {
-            eprintln!("sync: {e:#}");
+        match sync(&agent).await {
+            Ok(()) => synced = true,
+            Err(e) => eprintln!("sync: {e:#}"),
         }
-        collect_gated(&agent).await;
+        if synced {
+            collect_gated(&agent).await;
+        }
+        tokio::time::sleep(if synced { TICK } else { RETRY }).await;
     }
 }
 
@@ -192,8 +196,7 @@ async fn sync(agent: &Agent) -> Result<()> {
         println!("+ {}", u.user);
     }
     for email in actual.iter().filter(|e| {
-        !desired.iter().any(|u| &u.user == *e)
-            && !agent.cfg.machines.iter().any(|m| &m.name == *e)
+        !desired.iter().any(|u| &u.user == *e) && !agent.cfg.machines.iter().any(|m| &m.name == *e)
     }) {
         agent.xray.remove_user(&agent.tag, email).await?;
         println!("- {email}");

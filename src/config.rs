@@ -36,11 +36,10 @@ pub struct Machine {
 pub struct Host {
     pub name: String,
     pub flag: String,
-    pub fqdn: String,
+    pub endpoint: String,
+    pub api: String,
     #[serde(default)]
     pub addr: Option<String>,
-    #[serde(default)]
-    pub api: Option<String>,
     pub link: Link,
 }
 

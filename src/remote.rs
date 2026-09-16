@@ -20,12 +20,12 @@ pub async fn resolve_addrs(
         let mut attempt = 0u32;
         h.addr = loop {
             attempt += 1;
-            match doh_resolve(client, &h.fqdn).await {
+            match doh_resolve(client, &h.endpoint).await {
                 Ok(ip) => break Some(ip),
                 Err(e) => {
-                    eprintln!("resolve {}: {e:#}", h.fqdn);
+                    eprintln!("resolve {}: {e:#}", h.endpoint);
                     if max_attempts.is_some_and(|m| attempt >= m) {
-                        anyhow::bail!("resolve {} failed after {attempt} attempts", h.fqdn);
+                        anyhow::bail!("resolve {} failed after {attempt} attempts", h.endpoint);
                     }
                     tokio::time::sleep(Duration::from_secs(5)).await;
                 }
@@ -73,25 +73,13 @@ pub async fn request(
     path: &str,
     body: Option<String>,
 ) -> Result<Response> {
-    let urls = match &host.api {
-        Some(base) => vec![format!("{base}{path}")],
-        None => vec![
-            format!("https://{}:8443{path}", host.fqdn),
-            format!("https://{}:443{path}", host.fqdn),
-        ],
-    };
-    let mut last = None;
-    for url in &urls {
-        let mut req = client.request(method.clone(), url).bearer_auth(token);
-        if let Some(b) = &body {
-            req = req.body(b.clone());
-        }
-        match req.send().await {
-            Ok(r) => return Ok(r),
-            Err(e) => last = Some(e),
-        }
+    let mut req = client
+        .request(method, format!("{}{path}", host.api))
+        .bearer_auth(token);
+    if let Some(b) = body {
+        req = req.body(b);
     }
-    Err(last.unwrap().into())
+    Ok(req.send().await?)
 }
 
 pub async fn fetch_usage(client: &Client, token: &str, host: &Host) -> Result<Usage> {
