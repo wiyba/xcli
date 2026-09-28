@@ -1,5 +1,5 @@
 {
-  description = "xray node agent + subscription server + cli";
+  description = "xray traffic poller + cli";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -11,7 +11,7 @@
     {
       packages.${system}.default = pkgs.rustPlatform.buildRustPackage {
         pname = "xcli";
-        version = "0.1.0";
+        version = "0.2.0";
         src = self;
         cargoLock.lockFile = ./Cargo.lock;
         nativeBuildInputs = [ pkgs.protobuf ];
